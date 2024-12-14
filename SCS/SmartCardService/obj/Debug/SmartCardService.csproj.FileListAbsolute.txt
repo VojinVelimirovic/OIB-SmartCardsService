@@ -1,0 +1,10 @@
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\bin\Debug\SmartCardService.exe.config
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\bin\Debug\SmartCardService.exe
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\bin\Debug\SmartCardService.pdb
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\bin\Debug\Common.dll
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\bin\Debug\Common.pdb
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\obj\Debug\SmartCardService.csproj.AssemblyReference.cache
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\obj\Debug\SmartCardService.csproj.CoreCompileInputs.cache
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\obj\Debug\SmartCar.16D39AA3.Up2Date
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\obj\Debug\SmartCardService.exe
+C:\Users\Korisnik\Desktop\Ikp-memory-manager\SCS\SmartCardService\obj\Debug\SmartCardService.pdb

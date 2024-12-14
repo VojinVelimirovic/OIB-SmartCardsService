@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35514.174
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client", "Client\Client.csproj", "{E3535FE0-D3B5-48BB-A476-0362D269E446}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartCardsService", "SmartCardService\SmartCardsService.csproj", "{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Common", "Common\Common.csproj", "{5864ED12-4A84-4A27-832E-3881A2FB7956}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E3535FE0-D3B5-48BB-A476-0362D269E446}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3535FE0-D3B5-48BB-A476-0362D269E446}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3535FE0-D3B5-48BB-A476-0362D269E446}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3535FE0-D3B5-48BB-A476-0362D269E446}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5864ED12-4A84-4A27-832E-3881A2FB7956}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5864ED12-4A84-4A27-832E-3881A2FB7956}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5864ED12-4A84-4A27-832E-3881A2FB7956}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5864ED12-4A84-4A27-832E-3881A2FB7956}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
