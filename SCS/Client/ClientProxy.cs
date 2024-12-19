@@ -17,6 +17,11 @@ namespace Client
             factory = this.CreateChannel();
         }
 
+        public void CreateSmartCard(string username, int pin)
+        {
+            factory.CreateSmartCard(username, pin);
+        }
+
         public void TestCommunication(string message)
         {
             try
@@ -31,6 +36,16 @@ namespace Client
             {
                 Console.WriteLine("Error while trying to test communication: {0}", e.Message);
             }
+        }
+
+        public void UpdatePin(string username, int oldPin, int newPin)
+        {
+            factory.UpdatePin(username, oldPin, newPin);
+        }
+
+        public bool ValidateSmartCard(string username, int pin)
+        {
+            return factory.ValidateSmartCard(username, pin);
         }
     }
 }

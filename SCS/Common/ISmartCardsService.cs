@@ -13,5 +13,15 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         void TestCommunication(string message);
+
+        [OperationContract]
+        void CreateSmartCard(string username, int pin);
+
+        [OperationContract]
+        bool ValidateSmartCard(string username, int pin);
+
+        [OperationContract]
+        void UpdatePin(string username, int oldPin, int newPin);
+
     }
 }

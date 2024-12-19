@@ -28,6 +28,7 @@ namespace Client
                 //NAKON DODAVANJA WINDOWS IDENTITY-JA U GRUPU MORAS DA SE IZLOGUJES I ULOGUJES ILI SE NECE UPDATE-OVATI
                 proxy.TestCommunication("Zdravo");
                 proxy.TestCommunication("Klikni nesto da bi ugasio");
+                proxy.CreateSmartCard("Marko", 1234);
             }
 
             Console.ReadLine();
