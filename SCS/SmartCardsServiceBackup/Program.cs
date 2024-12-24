@@ -6,32 +6,31 @@ using System.Security.Principal;
 using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
+using SmartCardsService;
 
-namespace SmartCardsService
+namespace SmartCardsServiceBackup
 {
     internal class Program
     {
         static void Main(string[] args)
         {
             NetTcpBinding binding = new NetTcpBinding();
-            string address = "net.tcp://localhost:9999/SmartCardsService";
-
-            //jednostavna windows autentifikacija za sada
             binding.Security.Mode = SecurityMode.Transport;
             binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
             binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
 
-            ServiceHost host = new ServiceHost(typeof(SmartCardsService));
-            host.AddServiceEndpoint(typeof(ISmartCardsService), binding, address);
+            string backupServerAddress = "net.tcp://localhost:9998/SmartCardsService";
 
+            ServiceHost host = new ServiceHost(typeof(SmartCardsService.SmartCardsService));
+            host.AddServiceEndpoint(typeof(ISmartCardsService), binding, backupServerAddress);
             host.Open();
 
-            Console.WriteLine("Korisnik koji je pokrenuo servera :" + WindowsIdentity.GetCurrent().Name);
-
-            Console.WriteLine("Servis je pokrenut.");
+            Console.WriteLine("Backup server is running at: " + backupServerAddress);
+            Console.WriteLine("User running the backup server: " + WindowsIdentity.GetCurrent().Name);
+            Console.WriteLine("Press Enter to stop the server.");
 
             Console.ReadLine();
-
+            host.Close();
         }
     }
 }

@@ -4,7 +4,7 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{AC37BDE5-8BDE-4E44-85ED-0F042F3077B9}</ProjectGuid>
+    <ProjectGuid>{A8EF6C29-D6F5-4972-B8E6-BA5BCF8958D6}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <RootNamespace>SmartCardService</RootNamespace>
     <AssemblyName>SmartCardService</AssemblyName>

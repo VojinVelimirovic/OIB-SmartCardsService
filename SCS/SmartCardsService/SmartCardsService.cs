@@ -16,6 +16,8 @@ namespace SmartCardsService
     public class SmartCardsService : ISmartCardsService
     {
         private readonly string folderPath;
+        private readonly string backupServerAddress = "net.tcp://backuphost:9998/SmartCardsService";
+
 
         public SmartCardsService()
         {
@@ -69,6 +71,7 @@ namespace SmartCardsService
             File.WriteAllText(filePath, json);
 
             LogEvent($"SmartCard for user '{username}' created successfully.");
+            ReplicateToBackupServer(card);
         }
 
         public bool ValidateSmartCard(string username, int pin)
@@ -100,6 +103,7 @@ namespace SmartCardsService
             File.WriteAllText(filePath, JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true }));
 
             LogEvent($"PIN changed for user '{username}'.");
+            ReplicateToBackupServer(card);
         }
 
         private string HashPin(int pin)
@@ -110,17 +114,46 @@ namespace SmartCardsService
                 return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
             }
         }
+        private void ReplicateToBackupServer(SmartCard card)
+        {
+            try
+            {
+                NetTcpBinding binding = new NetTcpBinding();
+                binding.Security.Mode = SecurityMode.Transport;
+                binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
 
+                EndpointAddress address = new EndpointAddress(backupServerAddress);
+
+                using (ChannelFactory<ISmartCardsService> factory = new ChannelFactory<ISmartCardsService>(binding, address))
+                {
+                    ISmartCardsService backupService = factory.CreateChannel();
+                    backupService.CreateSmartCard(card.SubjectName, int.Parse(card.PIN)); // Call backup server
+                    LogEvent($"Replication to backup server succeeded for user '{card.SubjectName}'.");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogEvent($"Replication to backup server failed: {ex.Message}");
+            }
+        }
         private void LogEvent(string message)
         {
             const string source = "SmartCardService"; // Name of the source for the event log
             const string logName = "Application"; // The log name you want to write to
 
             // Check if the source exists, if not, create it
-            if (!EventLog.SourceExists(source))
+            try
             {
-                EventLog.CreateEventSource(source, logName);
+                if (!EventLog.SourceExists(source))
+                {
+                    EventLog.CreateEventSource(source, logName);
+                }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+
 
             // Write an entry to the event log
             EventLog.WriteEntry(source, message, EventLogEntryType.Information);
