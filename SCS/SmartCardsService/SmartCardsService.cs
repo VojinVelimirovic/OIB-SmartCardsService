@@ -133,10 +133,10 @@ namespace SmartCardsService
             }
             catch (Exception ex)
             {
-                LogEvent($"Replication to backup server failed: {ex.Message}");
+                LogEvent($"ERROR: Replication to backup server failed: {ex.Message}");
             }
         }
-        private void LogEvent(string message)
+        public static void LogEvent(string message)
         {
             const string source = "SmartCardService"; // Name of the source for the event log
             const string logName = "Application"; // The log name you want to write to
