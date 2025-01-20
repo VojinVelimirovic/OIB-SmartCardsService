@@ -16,12 +16,31 @@ namespace SmartCardsService
             CurrentUser = username;
         }
 
+        public static void PrintBalances()
+        {
+            Console.WriteLine("\n--- User Account Balances ---");
+            Console.WriteLine("{0,-20} {1,10}", "Username", "Balance");
+
+            // Print a separator line
+            Console.WriteLine(new string('-', 30));
+
+            // Loop through the dictionary and print each username and balance
+            foreach (var account in UsersAccountBalance)
+            {
+                Console.WriteLine("{0,-20} {1,10:C}", account.Key, account.Value);
+            }
+
+            // Print a separator line
+            Console.WriteLine(new string('-', 30));
+        }
+
         public static ATM Create(string username)
         {
             // If user doesn't exist, add them to the dict
             if (!UsersAccountBalance.ContainsKey(username))
             {
                 UsersAccountBalance.Add(username, 0);
+                PrintBalances();
             }
             return new ATM(username);
         }
@@ -41,6 +60,7 @@ namespace SmartCardsService
                     $"{ex.Message}");
                 return false;
             }
+            PrintBalances();
             return true;
         }
 
@@ -67,7 +87,7 @@ namespace SmartCardsService
                     $"{ex.Message}");
                 return false;
             }
-
+            PrintBalances();
             return true;
         }
     }

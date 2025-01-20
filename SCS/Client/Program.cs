@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Linq;
 using System.Security.Principal;
 using System.ServiceModel;
@@ -36,13 +38,12 @@ namespace Client
                     //KOJI JE ILI U GRUPI Manager ILI U GRUPI SmartCardUser
                     //NAKON DODAVANJA WINDOWS IDENTITY-JA U GRUPU MORAS DA SE IZLOGUJES I ULOGUJES ILI SE NECE UPDATE-OVATI
                     proxy.TestCommunication("Zdravo");
-                    proxy.TestCommunication("Klikni nesto da bi ugasio");
-                    proxy.CreateSmartCard("Marko", 1234);
 
                     isConnected = true;
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.WriteLine("Connected to the primary server.");
                     Console.ForegroundColor = ConsoleColor.White;
+                    Menu(proxy);
                 }
             }
             catch (FaultException fault)
@@ -69,11 +70,11 @@ namespace Client
                     using (ClientProxy proxy = new ClientProxy(binding, backupAddress))
                     {
                         proxy.TestCommunication("Zdravo");
-                        proxy.CreateSmartCard("Marko", 1234);
                         isConnected=true;
                         Console.ForegroundColor = ConsoleColor.Green;
                         Console.WriteLine("Connected to the backup server.");
                         Console.ForegroundColor = ConsoleColor.White;
+                        Menu(proxy);
                     }
                 }
                 catch (FaultException fault)
@@ -97,6 +98,111 @@ namespace Client
 
             Console.WriteLine("Press Enter to exit.");
             Console.ReadLine();
+        }
+        private static void Menu(ClientProxy proxy)
+        {
+            while (true)
+            {
+                Console.WriteLine("\n--- Client Menu ---");
+                Console.WriteLine("1. Create Smart Card");
+                Console.WriteLine("2. Change PIN");
+                Console.WriteLine("3. Deposit Funds");
+                Console.WriteLine("4. Withdraw Funds");
+                Console.WriteLine("5. View Active User Accounts (Manager Only)");
+                Console.WriteLine("6. Exit");
+                Console.Write("Choose an option: ");
+
+                string choice = Console.ReadLine();
+
+                try
+                {
+                    switch (choice)
+                    {
+                        case "1":
+                            Console.Write("Enter username: ");
+                            string username = Console.ReadLine();
+                            Console.Write("Enter 4-digit PIN: ");
+                            int pin = int.Parse(Console.ReadLine());
+                            proxy.CreateSmartCard(username, pin);
+                            Console.WriteLine("Smart card created successfully.");
+                            break;
+
+                        case "2":
+                            Console.Write("Enter username: ");
+                            string changeUsername = Console.ReadLine();
+                            Console.Write("Enter current PIN: ");
+                            int currentPin = int.Parse(Console.ReadLine());
+                            Console.Write("Enter new 4-digit PIN: ");
+                            int newPin = int.Parse(Console.ReadLine());
+                            proxy.UpdatePin(changeUsername, currentPin, newPin);
+                            Console.WriteLine("PIN updated successfully.");
+                            break;
+
+                        case "3":
+                            Console.Write("Enter username: ");
+                            string depositUsername = Console.ReadLine();
+                            Console.Write("Enter 4-digit PIN: ");
+                            int depositPin = int.Parse(Console.ReadLine());
+                            Console.Write("Enter amount to deposit: ");
+                            float depositAmount = float.Parse(Console.ReadLine());
+                            proxy.AddBalance(depositUsername, depositPin, depositAmount);
+                            Console.WriteLine($"Deposited {depositAmount} successfully.");
+                            break;
+
+                        case "4":
+                            Console.Write("Enter username: ");
+                            string withdrawUsername = Console.ReadLine();
+                            Console.Write("Enter 4-digit PIN: ");
+                            int withdrawPin = int.Parse(Console.ReadLine());
+                            Console.Write("Enter amount to withdraw: ");
+                            float withdrawAmount = float.Parse(Console.ReadLine());
+                            proxy.RemoveBalance(withdrawUsername, withdrawPin, withdrawAmount);
+                            Console.WriteLine($"Withdrew {withdrawAmount} successfully.");
+                            break;
+
+                        case "5":
+                            var activeAccounts = proxy.GetActiveUserAccounts();
+                            if (activeAccounts == null) {
+                            }else if(activeAccounts.Count == 0)
+                            {
+                                Console.WriteLine("No active user accounts found.");
+                            }
+                            else
+                            {
+                                Console.WriteLine("Active User Accounts:");
+                                foreach (var account in activeAccounts)
+                                {
+                                    Console.WriteLine(account);
+                                }
+                            }
+                            break;
+
+                        case "6":
+                            Console.WriteLine("Exiting...");
+                            return;
+
+                        default:
+                            Console.WriteLine("Invalid option. Please try again.");
+                            break;
+                    }
+                }
+                catch (FaultException<SecurityException> faultEx)
+                {
+                    Console.WriteLine($"An error occurred: {faultEx.Detail.Message}");
+                }
+                catch (FaultException fault)
+                {
+                    Console.WriteLine("An error occurred: " + fault.Message);
+                }
+                catch (CommunicationException commEx)
+                {
+                    Console.WriteLine("An error occurred: " + commEx.Message);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"An error occurred: {ex.Message}");
+                }
+            }
         }
     }
 }

@@ -3,7 +3,11 @@
     "Name": "New Profile",
     "Projects": [
       {
-        "Path": "SmartCardService\\SmartCardsService.csproj",
+        "Path": "SmartCardsService\\SmartCardsService.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "SmartCardsServiceBackup\\SmartCardsServiceBackup.csproj",
         "Action": "Start"
       },
       {
