@@ -19,6 +19,7 @@ namespace SmartCardsService
         private readonly string folderPath;
         private readonly string backupServerAddress = "net.tcp://backuphost:9998/SmartCardsService";
 
+
         public SmartCardsService()
         {
             string solutionDir = GetSolutionDirectory();
@@ -31,10 +32,12 @@ namespace SmartCardsService
             var solutionDir = new DirectoryInfo(currentDirectory).Parent.Parent.Parent;
             return solutionDir.FullName;
         }
+
         public static bool IsUserInValidGroup()
         {
             return Thread.CurrentPrincipal.IsInRole("SmartCardUser") || Thread.CurrentPrincipal.IsInRole("Manager");
         }
+
         public void TestCommunication(string message)
         {
             if (IsUserInValidGroup())
@@ -44,21 +47,20 @@ namespace SmartCardsService
             else
             {
                 string name = Thread.CurrentPrincipal.Identity.Name;
-                DateTime time = DateTime.Now;
-                string exceptionMessage = String.Format("Access is denied.\n User {0} tried to call TestCommunication method (time: {1}).\n " +
-                    "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
-                throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
+                string exceptionMessage = String.Format
+                    ("Access is denied.\n User {0} tried to call TestCommunication method (time: {1}).\n ", name, DateTime.Now.TimeOfDay);
             }
-
         }
 
         public void CreateSmartCard(string username, int pin)
         {
-            if (!IsUserInValidGroup()) {
+            if (!IsUserInValidGroup())
+            {
                 string name = Thread.CurrentPrincipal.Identity.Name;
                 DateTime time = DateTime.Now;
-                string exceptionMessage = String.Format("Access is denied.\n User {0} tried to call CreateSmartCard method (time: {1}).\n " +
-                    "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
+                string exceptionMessage = String.Format
+                    ("Access is denied.\n User {0} tried to call CreateSmartCard method (time: {1}).\n " +
+                    "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, DateTime.Now.TimeOfDay);
                 throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
             }
 
@@ -81,21 +83,19 @@ namespace SmartCardsService
             string filePath = Path.Combine(folderPath, $"{username}.json");
             string json = JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filePath, json);
-            ATM.Create(username);
-            LogEvent($"SmartCard for user '{username}' created successfully.");
+            //ATM.Create(username);
+            Logger.LogEvent($"SmartCard for user '{username}' created successfully.");
             ReplicateToBackupServer(card);
         }
 
         public bool ValidateSmartCard(string username, int pin)
         {
             string filePath = Path.Combine(folderPath, $"{username}.json");
-            if (!File.Exists(filePath)) {
-                return false;
-            }
-             
+            if (!File.Exists(filePath)) return false;
 
             string json = File.ReadAllText(filePath);
             SmartCard card = JsonSerializer.Deserialize<SmartCard>(json);
+
             string hashedPin = HashPin(pin);
             return card?.PIN == hashedPin;
         }
@@ -114,7 +114,7 @@ namespace SmartCardsService
 
             if (!ValidateSmartCard(username, oldPin))
             {
-                throw new FaultException<SecurityException>(new SecurityException("Access is denied. Invalid username/pin.\n"));
+                throw new FaultException<SecurityException>(new SecurityException("Access is denied. Invalid username or pin.\n"));
             }
 
             string filePath = Path.Combine(folderPath, $"{username}.json");
@@ -124,7 +124,7 @@ namespace SmartCardsService
             card.PIN = HashPin(newPin);
             File.WriteAllText(filePath, JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true }));
 
-            LogEvent($"PIN changed for user '{username}'.");
+            Logger.LogEvent($"PIN changed for user '{username}'.");
             ReplicateToBackupServer(card);
         }
 
@@ -150,37 +150,17 @@ namespace SmartCardsService
                 {
                     ISmartCardsService backupService = factory.CreateChannel();
                     backupService.CreateSmartCard(card.SubjectName, int.Parse(card.PIN)); // Call backup server
-                    LogEvent($"Replication to backup server succeeded for user '{card.SubjectName}'.");
+                    Logger.LogEvent($"Replication to backup server succeeded for user '{card.SubjectName}'.");
                 }
             }
             catch (Exception ex)
             {
-                LogEvent($"ERROR: Replication to backup server failed: {ex.Message}");
+                Logger.LogEvent($"ERROR: Replication to backup server failed: {ex.Message}");
             }
         }
-        public static void LogEvent(string message)
+
+        public bool Deposit(string username, int pin, float sum)
         {
-            const string source = "SmartCardService"; // Name of the source for the event log
-            const string logName = "Application"; // The log name you want to write to
-
-            // Check if the source exists, if not, create it
-            try
-            {
-                if (!EventLog.SourceExists(source))
-                {
-                    EventLog.CreateEventSource(source, logName);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-
-
-            // Write an entry to the event log
-            EventLog.WriteEntry(source, message, EventLogEntryType.Information);
-        }
-        public bool AddBalance(string username, int pin, float sum) {
             if (!IsUserInValidGroup())
             {
                 string name = Thread.CurrentPrincipal.Identity.Name;
@@ -189,15 +169,16 @@ namespace SmartCardsService
                     "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
                 throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
             }
-            if (!ValidateSmartCard(username, pin)) {
+            if (!ValidateSmartCard(username, pin))
+            {
                 throw new FaultException<SecurityException>(new SecurityException("Access is denied.\nInvalid username/pin.\n"));
             }
-            ATM atm = ATM.Create(username);
-            LogEvent($"User '{username}' added {sum} to his ATM balance.");
+            // ATM atm = ATM.Create(username);
+            Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
             return atm.AddBalance(sum);
         }
 
-        public bool RemoveBalance(string username, int pin, float sum)
+        public bool Withdraw(string username, int pin, float sum)
         {
             if (!IsUserInValidGroup())
             {
@@ -211,12 +192,12 @@ namespace SmartCardsService
             {
                 throw new FaultException<SecurityException>(new SecurityException("Access is denied.\nInvalid username/pin.\n"));
             }
-            ATM atm = ATM.Create(username);
-            LogEvent($"User '{username}' added {sum} to his ATM balance.");
+            // ATM atm = ATM.Create(username);
+            Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
             return atm.RemoveBalance(sum);
         }
 
-        public List<string> GetActiveUserAccounts()
+        public string[] GetActiveUserAccounts()
         {
             if (!Thread.CurrentPrincipal.IsInRole("SmartCardUser"))
             {
@@ -224,5 +205,6 @@ namespace SmartCardsService
             }
             return ATM.UsersAccountBalance.Keys.ToList();
         }
+
     }
 }
