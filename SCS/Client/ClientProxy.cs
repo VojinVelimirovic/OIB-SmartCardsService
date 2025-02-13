@@ -12,6 +12,22 @@ namespace Client
         {
             factory = this.CreateChannel();
         }
+        public bool TestConnection()
+        {
+            try
+            {
+                return this.Ping(); // Call the Ping method on the server
+            }
+            catch
+            {
+                return false; // If the call fails, the server is unreachable
+            }
+        }
+
+        public bool Ping()
+        {
+            return factory.Ping();
+        }
 
         public bool AuthenticateUser(string username, int pin)
         {
@@ -32,6 +48,7 @@ namespace Client
         {
             return factory.GetActiveUserAccounts();
         }
+
 
     }
 }

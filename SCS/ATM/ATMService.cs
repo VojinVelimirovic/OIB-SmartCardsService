@@ -18,6 +18,10 @@ namespace ATM
         {
             ConnectToSmartCardService();
         }
+        public bool Ping()
+        {
+            return true; // Just returns true if the server is reachable
+        }
 
         private void ConnectToSmartCardService()
         {
@@ -38,7 +42,8 @@ namespace ATM
             {
                 Console.WriteLine("Connecting to primary SmartCardsService...");
                 smartCardService = CreateChannel(binding, primaryAddress);
-                smartCardService.TestCommunication("ATM connected successfully.");
+                Console.WriteLine("ATM connected successfully.");
+                smartCardService.TestCommunication();
             }
             catch (Exception)
             {
@@ -46,12 +51,12 @@ namespace ATM
                 try
                 {
                     smartCardService = CreateChannel(binding, backupAddress);
-                    smartCardService.TestCommunication("ATM connected to backup.");
+                    smartCardService.TestCommunication();
                     Console.WriteLine("Connected to backup SmartCardsService.");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine("Failed to connect to both primary and backup SmartCardsService: " + ex.Message);
+                    Console.WriteLine("Failed to connect to both primary and backup SmartCardsService: \n" + ex.Message);
                 }
             }
         }
@@ -72,7 +77,7 @@ namespace ATM
             {
                 Console.WriteLine("Lost connection to SmartCardsService. Reconnecting...");
                 ConnectToSmartCardService();
-                return smartCardService.ValidateSmartCard(username, pin);
+                return false;
             }
         }
 
@@ -103,6 +108,7 @@ namespace ATM
                 Logger.LogEvent($"ERROR: Authentication failed for user {username} during withdrawal.");
                 throw new FaultException("Authentication failed.");
             }
+            return true;
 
             // TODO: Send a request to SmartCardService
 
@@ -129,7 +135,7 @@ namespace ATM
                 Logger.LogEvent("ACCESS DENIED: Unauthorized attempt to access all accounts.");
                 throw new FaultException("Access Denied: Only Managers can access this information.");
             }
-
+            return new string[] { };
             // TODO: Send a request to SmartCardService
             
             //return accountBalances.Keys.ToArray();
@@ -150,5 +156,6 @@ namespace ATM
         //    // Print a separator line
         //    Console.WriteLine(new string('-', 30));
         //}
+
     }
 }

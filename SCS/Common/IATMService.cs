@@ -21,5 +21,8 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         string[] GetActiveUserAccounts(); // Only for Managers
+
+        [OperationContract]
+        bool Ping();
     }
 }

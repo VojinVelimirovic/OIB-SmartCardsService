@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.ServiceModel;
 using Common;
@@ -22,8 +23,45 @@ namespace Client
             {
                 using (ClientProxy proxy = new ClientProxy(binding, atmAddress))
                 {
+                    Console.WriteLine("Checking connection to ATM...");
+
+                    // Attach Client Certificate
+                    //proxy.Credentials.ClientCertificate.SetCertificate(
+                    //    StoreLocation.CurrentUser,
+                    //    StoreName.My,
+                    //    X509FindType.FindBySubjectName,
+                    //    "YourClientCertificateName" // Replace with actual client certificate name
+                    //);
+
+                    // Call the method that verifies both authentication methods
+                    // string verificationResult = proxy.VerifyClient();
+                    // Console.WriteLine(verificationResult);
+
+                    try
+                    {
+                        if (proxy.TestConnection())
+                        {
+                            Console.WriteLine("Connection to ATM established successfully.");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Connection test failed. Exiting...");
+                            return;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("Failed to establish connection: " + ex.Message);
+                        return;
+                    }
+
                     Console.WriteLine("Authenticating user...");
+                    Console.ReadLine();
                     bool isAuthenticated = proxy.AuthenticateUser("Marko", 1234);
+
+                    Console.ReadLine();
+                    Console.WriteLine("Authenticating user...");
+                    bool isAuthenticate2d = proxy.AuthenticateUser("Marko", 1234);
 
                     if (isAuthenticated)
                     {
@@ -71,7 +109,7 @@ namespace Client
                             string username = Console.ReadLine();
                             Console.Write("Enter 4-digit PIN: ");
                             int pin = int.Parse(Console.ReadLine());
-                            proxy.CreateSmartCard(username, pin);
+                           // proxy.CreateSmartCard(username, pin);
                             Console.WriteLine("Smart card created successfully.");
                             break;
 
@@ -82,7 +120,7 @@ namespace Client
                             int currentPin = int.Parse(Console.ReadLine());
                             Console.Write("Enter new 4-digit PIN: ");
                             int newPin = int.Parse(Console.ReadLine());
-                            proxy.UpdatePin(changeUsername, currentPin, newPin);
+                           // proxy.UpdatePin(changeUsername, currentPin, newPin);
                             Console.WriteLine("PIN updated successfully.");
                             break;
 
@@ -93,7 +131,7 @@ namespace Client
                             int depositPin = int.Parse(Console.ReadLine());
                             Console.Write("Enter amount to deposit: ");
                             float depositAmount = float.Parse(Console.ReadLine());
-                            proxy.AddBalance(depositUsername, depositPin, depositAmount);
+                           // proxy.AddBalance(depositUsername, depositPin, depositAmount);
                             Console.WriteLine($"Deposited {depositAmount} successfully.");
                             break;
 
@@ -104,7 +142,7 @@ namespace Client
                             int withdrawPin = int.Parse(Console.ReadLine());
                             Console.Write("Enter amount to withdraw: ");
                             float withdrawAmount = float.Parse(Console.ReadLine());
-                            proxy.RemoveBalance(withdrawUsername, withdrawPin, withdrawAmount);
+                           // proxy.RemoveBalance(withdrawUsername, withdrawPin, withdrawAmount);
                             Console.WriteLine($"Withdrew {withdrawAmount} successfully.");
                             break;
 
@@ -113,10 +151,7 @@ namespace Client
                             if (activeAccounts == null)
                             {
                             }
-                            else if (activeAccounts.Count == 0)
-                            {
-                                Console.WriteLine("No active user accounts found.");
-                            }
+                            //else if (activeAccounts.Count == 0) { Console.WriteLine("No active user accounts found."); }
                             else
                             {
                                 Console.WriteLine("Active User Accounts:");

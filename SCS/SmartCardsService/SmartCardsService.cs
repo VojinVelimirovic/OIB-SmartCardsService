@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.IO;
 using System.Text.Json;
 using System.Diagnostics;
+using System.Security.Cryptography.X509Certificates;
 
 namespace SmartCardsService
 {
@@ -38,13 +39,9 @@ namespace SmartCardsService
             return Thread.CurrentPrincipal.IsInRole("SmartCardUser") || Thread.CurrentPrincipal.IsInRole("Manager");
         }
 
-        public void TestCommunication(string message)
+        public void TestCommunication()
         {
-            if (IsUserInValidGroup())
-            {
-                Console.WriteLine(message);
-            }
-            else
+            if (!IsUserInValidGroup())
             {
                 string name = Thread.CurrentPrincipal.Identity.Name;
                 string exceptionMessage = String.Format
@@ -175,7 +172,8 @@ namespace SmartCardsService
             }
             // ATM atm = ATM.Create(username);
             Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
-            return atm.AddBalance(sum);
+            return true;
+          //  return atm.AddBalance(sum);
         }
 
         public bool Withdraw(string username, int pin, float sum)
@@ -194,7 +192,8 @@ namespace SmartCardsService
             }
             // ATM atm = ATM.Create(username);
             Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
-            return atm.RemoveBalance(sum);
+            return true;
+            // return atm.RemoveBalance(sum);
         }
 
         public string[] GetActiveUserAccounts()
@@ -203,8 +202,48 @@ namespace SmartCardsService
             {
                 throw new FaultException<SecurityException>(new SecurityException("Access is denied. For this method user needs to be member of the group Manager.\n"));
             }
-            return ATM.UsersAccountBalance.Keys.ToList();
+            return new string[] { };
+            //return ATM.UsersAccountBalance.Keys.ToList();
         }
 
+        //////////////////////////////////
+        public string VerifyClient()
+        {
+            try
+            {
+                // Step 1: Get the Windows Identity
+                string windowsUser = ServiceSecurityContext.Current.WindowsIdentity?.Name ?? "Unknown Windows User";
+
+                // Step 2: Retrieve the Client Certificate
+                X509Certificate2 clientCert = OperationContext.Current.ServiceSecurityContext?.AuthorizationContext?.Properties["TransportSecurity"] as X509Certificate2;
+
+                if (clientCert == null)
+                {
+                    throw new FaultException("Client certificate is missing.");
+                }
+
+                // Step 3: Extract the Organizational Unit (OU) from the certificate
+                string subject = clientCert.Subject;
+                string ou = ExtractOrganizationalUnit(subject) ?? "OU not found";
+
+                // Step 4: Return combined authentication result
+                return $"Windows User: {windowsUser} | Client Certificate OU: {ou}";
+            }
+            catch (Exception ex)
+            {
+                return "Error: " + ex.Message;
+            }
+        }
+
+        private string ExtractOrganizationalUnit(string subject)
+        {
+            // Extract "OU=" from certificate subject
+            var parts = subject.Split(',')
+                               .Select(part => part.Trim())
+                               .Where(part => part.StartsWith("OU="))
+                               .ToList();
+
+            return parts.Count > 0 ? parts[0].Substring(3) : null;
+        }
     }
 }
