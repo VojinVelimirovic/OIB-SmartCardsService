@@ -12,11 +12,14 @@ namespace Common
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        void Deposit(string username, double amount);
+        bool Deposit(string username, double amount);
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         bool Withdraw(string username, double amount);
+        [OperationContract]
+        [FaultContract(typeof(SecurityException))]
+        double? GetBalance(string username);
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]

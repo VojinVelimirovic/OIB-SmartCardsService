@@ -11,11 +11,13 @@ namespace ATM
     public class ATMService : IATMService
     {
         private ISmartCardsService smartCardService;
+        private readonly InMemoryDatabase _database;
         private string primaryAddress = "net.tcp://localhost:9999/SmartCardsService";
         private string backupAddress = "net.tcp://localhost:9998/SmartCardsService";
 
         public ATMService()
         {
+            _database = InMemoryDatabase.Instance;
             ConnectToSmartCardService();
         }
         public bool Ping()
@@ -81,34 +83,23 @@ namespace ATM
             }
         }
 
-        public void Deposit(string username, double amount)
+        public double? GetBalance(string username)
         {
-            if (!AuthenticateUser(username, 1234))  // PIN should be passed securely
-            {
-                Logger.LogEvent($"ERROR: Authentication failed for user {username} during deposit.");
-                throw new FaultException("Authentication failed.");
-            }
+            return _database.GetBalance(username);
+        }
+
+        public bool Deposit(string username, double amount)
+        {
+            return _database.Deposit(username, amount);
 
             // TODO: Send a request to SmartCardService
-
-            //if (!accountBalances.ContainsKey(username))
-            //{
-            //    accountBalances[username] = 0;
-            //}
-
-            //accountBalances[username] += amount;
             //Console.WriteLine($"{username} deposited {amount}. New balance: {accountBalances[username]}");
             //Logger.LogEvent($"User {username} deposited {amount}. New balance: {accountBalances[username]}");
         }
 
         public bool Withdraw(string username, double amount)
         {
-            if (!AuthenticateUser(username, 1234))  // PIN should be passed securely
-            {
-                Logger.LogEvent($"ERROR: Authentication failed for user {username} during withdrawal.");
-                throw new FaultException("Authentication failed.");
-            }
-            return true;
+            return _database.Withdraw(username, amount);
 
             // TODO: Send a request to SmartCardService
 

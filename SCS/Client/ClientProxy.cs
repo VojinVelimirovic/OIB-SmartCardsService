@@ -33,10 +33,13 @@ namespace Client
         {
             return factory.AuthenticateUser(username, pin);
         }
-
-        public void Deposit(string username, double amount)
+        public double? GetBalance(string username)
         {
-            factory.Deposit(username, amount);
+            return factory.GetBalance(username);
+        }
+        public bool Deposit(string username, double amount)
+        {
+            return factory.Deposit(username, amount);
         }
 
         public bool Withdraw(string username, double amount)
@@ -48,7 +51,5 @@ namespace Client
         {
             return factory.GetActiveUserAccounts();
         }
-
-
     }
 }

@@ -156,7 +156,7 @@ namespace SmartCardsService
             }
         }
 
-        public bool Deposit(string username, int pin, float sum)
+        public bool Deposit(string username, int pin, double sum)
         {
             if (!IsUserInValidGroup())
             {
@@ -176,7 +176,7 @@ namespace SmartCardsService
           //  return atm.AddBalance(sum);
         }
 
-        public bool Withdraw(string username, int pin, float sum)
+        public bool Withdraw(string username, int pin, double sum)
         {
             if (!IsUserInValidGroup())
             {
