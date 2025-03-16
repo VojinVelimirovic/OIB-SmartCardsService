@@ -14,6 +14,7 @@ namespace ATM
         private readonly InMemoryDatabase _database;
         private string primaryAddress = "net.tcp://localhost:9999/SmartCardsService";
         private string backupAddress = "net.tcp://localhost:9998/SmartCardsService";
+        private bool isAuthenticated = false;
 
         public ATMService()
         {
@@ -73,7 +74,7 @@ namespace ATM
         {
             try
             {
-                return smartCardService.ValidateSmartCard(username, pin);
+                return isAuthenticated = smartCardService.ValidateSmartCard(username, pin);
             }
             catch (CommunicationException)
             {
@@ -90,7 +91,11 @@ namespace ATM
 
         public bool Deposit(string username, double amount)
         {
-            return _database.Deposit(username, amount);
+            if (isAuthenticated)
+            {
+                return _database.Deposit(username, amount);
+            }
+            return false;
 
             // TODO: Send a request to SmartCardService
             //Console.WriteLine($"{username} deposited {amount}. New balance: {accountBalances[username]}");
@@ -99,7 +104,11 @@ namespace ATM
 
         public bool Withdraw(string username, double amount)
         {
-            return _database.Withdraw(username, amount);
+            if (isAuthenticated)
+            {
+                return _database.Withdraw(username, amount);
+            }
+            return false;
 
             // TODO: Send a request to SmartCardService
 
