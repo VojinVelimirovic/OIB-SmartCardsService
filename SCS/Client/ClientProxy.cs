@@ -51,5 +51,16 @@ namespace Client
         {
             return factory.GetActiveUserAccounts();
         }
+        protected override void OnClosed()
+        {
+            base.OnClosed();
+            if (factory is IClientChannel clientChannel)
+            {
+                if (clientChannel.State == CommunicationState.Faulted)
+                    clientChannel.Abort();
+                else
+                    clientChannel.Close();
+            }
+        }
     }
 }

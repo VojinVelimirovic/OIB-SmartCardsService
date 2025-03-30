@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.ServiceModel;
@@ -10,62 +11,81 @@ namespace Client
     {
         static void Main(string[] args)
         {
+            // Configure binding with both certificate and Windows auth
             NetTcpBinding binding = new NetTcpBinding();
-            binding.Security.Mode = SecurityMode.Transport;
-            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
+            binding.Security.Mode = SecurityMode.TransportWithMessageCredential;
+            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
+            binding.Security.Message.ClientCredentialType = MessageCredentialType.Windows;
             binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
 
             string atmAddress = "net.tcp://localhost:8888/ATMService";
 
+            // Get current Windows user identity
+            WindowsIdentity windowsIdentity = WindowsIdentity.GetCurrent();
+            string userName = ParseName(windowsIdentity.Name);
+
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("Current user: " + WindowsIdentity.GetCurrent().Name);
+            Console.WriteLine("Current user: " + windowsIdentity.Name);
+
+            X509Certificate2 clientCert = GetClientCertificate(userName);
+            if (clientCert == null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"ERROR: No valid certificate found for user '{userName}'");
+                Console.ResetColor();
+                Console.ReadLine();
+                return;
+            }
 
             try
             {
                 using (ClientProxy proxy = new ClientProxy(binding, atmAddress))
                 {
-                    Console.WriteLine("Checking connection to ATM...");
-
-                    try
+                    // Set client credentials directly on the proxy
+                    proxy.Credentials.ClientCertificate.Certificate = clientCert;
+                    proxy.Credentials.Windows.AllowedImpersonationLevel = TokenImpersonationLevel.Impersonation;
                     {
-                        if (proxy.TestConnection())
+                        Console.WriteLine("Checking connection to ATM...");
+
+                        try
+                        {
+                            if (proxy.TestConnection())
+                            {
+                                Console.ForegroundColor = ConsoleColor.Green;
+                                Console.WriteLine("Connection to ATM established successfully.");
+                            }
+                            else
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Connection test failed. Exiting...");
+                                return;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Failed to establish connection: " + ex.Message);
+                            return;
+                        }
+
+                        Console.ForegroundColor = ConsoleColor.Cyan;
+                        Console.WriteLine("Authenticating user...");
+
+                        bool isAuthenticated = proxy.AuthenticateUser(userName, 1234);
+
+                        if (isAuthenticated)
                         {
                             Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("Connection to ATM established successfully.");
+                            Console.WriteLine("Authenticated! Welcome {0}!", userName);
+                            Console.ResetColor();
+                            Menu(proxy, userName);
                         }
                         else
                         {
                             Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Connection test failed. Exiting...");
-                            return;
+                            Console.WriteLine("Authentication failed.");
+                            Console.ResetColor();
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Failed to establish connection: " + ex.Message);
-                        return;
-                    }
-
-                    Console.ForegroundColor = ConsoleColor.Cyan;
-                    Console.WriteLine("Authenticating user...");
-
-                    string username = "Marko";
-
-                    bool isAuthenticated = proxy.AuthenticateUser(username, 1234);
-
-                    if (isAuthenticated)
-                    {
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("Authenticated! Welcome {0}!", username);
-                        Console.ResetColor();
-                        Menu(proxy, username);
-                    }
-                    else
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Authentication failed.");
-                        Console.ResetColor();
                     }
                 }
             }
@@ -210,6 +230,55 @@ namespace Client
                     Console.WriteLine($"An error occurred: {ex.Message}");
                     Console.ResetColor();
                 }
+            }
+        }
+        private static string ParseName(string winLogonName)
+        {
+            string[] parts = new string[] { };
+
+            if (winLogonName.Contains("@"))
+            {
+                ///UPN format
+                parts = winLogonName.Split('@');
+                return parts[0];
+            }
+            else if (winLogonName.Contains("\\"))
+            {
+                /// SPN format
+                parts = winLogonName.Split('\\');
+                return parts[1];
+            }
+            else
+            {
+                return winLogonName;
+            }
+        }
+        private static X509Certificate2 GetClientCertificate(string userName)
+        {
+            string ou = userName == "oib_manager" ? "Manager" :
+                       userName == "oib_smartcarduser" ? "SmartCardUser" :
+                       string.Empty;
+
+            if (string.IsNullOrEmpty(ou))
+                return null;
+
+            var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
+            store.Open(OpenFlags.ReadOnly);
+
+            try
+            {
+                foreach (X509Certificate2 cert in store.Certificates)
+                {
+                    if (cert.Subject == $"CN={userName}, OU={ou}" && cert.HasPrivateKey)
+                    {
+                        return cert;
+                    }
+                }
+                return null;
+            }
+            finally
+            {
+                store.Close();
             }
         }
     }
