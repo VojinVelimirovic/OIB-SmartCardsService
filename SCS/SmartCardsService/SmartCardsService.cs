@@ -39,14 +39,16 @@ namespace SmartCardsService
             return Thread.CurrentPrincipal.IsInRole("SmartCardUser") || Thread.CurrentPrincipal.IsInRole("Manager");
         }
 
-        public void TestCommunication()
+        public bool TestCommunication()
         {
             if (!IsUserInValidGroup())
             {
                 string name = Thread.CurrentPrincipal.Identity.Name;
                 string exceptionMessage = String.Format
                     ("Access is denied.\n User {0} tried to call TestCommunication method (time: {1}).\n ", name, DateTime.Now.TimeOfDay);
+                return false;
             }
+            return true;
         }
 
         public void CreateSmartCard(string username, int pin)

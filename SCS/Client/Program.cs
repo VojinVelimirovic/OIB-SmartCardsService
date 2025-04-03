@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
@@ -19,6 +20,7 @@ namespace Client
             binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
 
             string atmAddress = "net.tcp://localhost:8888/ATMService";
+            string scsAddress = "net.tcp://localhost:9999/SmartCardsService";
 
             // Get current Windows user identity
             WindowsIdentity windowsIdentity = WindowsIdentity.GetCurrent();
@@ -39,17 +41,17 @@ namespace Client
 
             try
             {
-                using (ClientProxy proxy = new ClientProxy(binding, atmAddress))
+                using (ClientProxyATM atmProxy = new ClientProxyATM(binding, atmAddress))
                 {
                     // Set client credentials directly on the proxy
-                    proxy.Credentials.ClientCertificate.Certificate = clientCert;
-                    proxy.Credentials.Windows.AllowedImpersonationLevel = TokenImpersonationLevel.Impersonation;
+                    atmProxy.Credentials.ClientCertificate.Certificate = clientCert;
+                    atmProxy.Credentials.Windows.AllowedImpersonationLevel = TokenImpersonationLevel.Impersonation;
                     {
                         Console.WriteLine("Checking connection to ATM...");
 
                         try
                         {
-                            if (proxy.TestConnection())
+                            if (atmProxy.TestConnection())
                             {
                                 Console.ForegroundColor = ConsoleColor.Green;
                                 Console.WriteLine("Connection to ATM established successfully.");
@@ -71,14 +73,15 @@ namespace Client
                         Console.ForegroundColor = ConsoleColor.Cyan;
                         Console.WriteLine("Authenticating user...");
 
-                        bool isAuthenticated = proxy.AuthenticateUser(userName, 1234);
+                        string username = "Marko";
+                        bool isAuthenticated = atmProxy.AuthenticateUser(username, 1234);
 
                         if (isAuthenticated)
                         {
                             Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("Authenticated! Welcome {0}!", userName);
+                            Console.WriteLine("Authenticated! Welcome {0}!", username);
                             Console.ResetColor();
-                            Menu(proxy, userName);
+                            Menu(atmProxy, username);
                         }
                         else
                         {
@@ -102,7 +105,7 @@ namespace Client
             Console.ReadLine();
         }
 
-        private static void Menu(ClientProxy proxy, string username)
+        private static void Menu(ClientProxyATM proxy, string username)
         {
             while (true)
             {
@@ -125,61 +128,89 @@ namespace Client
                     switch (choice)
                     {
                         case "1":
-                            Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.Write("Enter username: ");
+                            string newUsername = Console.ReadLine();
                             Console.Write("Enter 4-digit PIN: ");
-                            int pin = int.Parse(Console.ReadLine());
-                            // proxy.CreateSmartCard(username, pin);
+
+                            if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
+                            {
+                                WriteError("Invalid PIN. Must be a 4-digit number.");
+                                break;
+                            }
+
+                            // proxy.CreateSmartCard(newUsername, pin);
                             Console.WriteLine("Smart card created successfully.");
-                            Console.ResetColor();
                             break;
 
                         case "2":
-                            Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.Write("Enter username: ");
                             string changeUsername = Console.ReadLine();
                             Console.Write("Enter current PIN: ");
-                            int currentPin = int.Parse(Console.ReadLine());
+
+                            if (!int.TryParse(Console.ReadLine(), out int currentPin) || currentPin < 1000 || currentPin > 9999)
+                            {
+                                WriteError("Invalid current PIN. Must be a 4-digit number.");
+                                break;
+                            }
+
                             Console.Write("Enter new 4-digit PIN: ");
-                            int newPin = int.Parse(Console.ReadLine());
+                            if (!int.TryParse(Console.ReadLine(), out int newPin) || newPin < 1000 || newPin > 9999)
+                            {
+                                WriteError("Invalid new PIN. Must be a 4-digit number.");
+                                break;
+                            }
+
                             // proxy.UpdatePin(changeUsername, currentPin, newPin);
                             Console.WriteLine("PIN updated successfully.");
-                            Console.ResetColor();
                             break;
 
                         case "3":
-                            Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.Write("Enter amount to deposit: ");
-                            double depositAmount = double.Parse(Console.ReadLine());
+
+                            if (!double.TryParse(Console.ReadLine(), out double depositAmount) || depositAmount <= 0)
+                            {
+                                WriteError("Invalid deposit amount.");
+                                break;
+                            }
 
                             if (proxy.Deposit(username, depositAmount))
                             {
-                                Console.WriteLine($"Deposited {depositAmount} successfully.");
+                                Console.WriteLine($"Deposited {depositAmount:C} successfully.");
                             }
-                            Console.WriteLine("Deposit error");
+                            else
+                            {
+                                WriteError("Deposit failed.");
+                            }
                             break;
 
                         case "4":
-                            Console.ForegroundColor = ConsoleColor.Yellow;
                             Console.Write("Enter amount to withdraw: ");
-                            double withdrawAmount = double.Parse(Console.ReadLine());
+
+                            if (!double.TryParse(Console.ReadLine(), out double withdrawAmount) || withdrawAmount <= 0)
+                            {
+                                WriteError("Invalid withdrawal amount.");
+                                break;
+                            }
 
                             if (proxy.Withdraw(username, withdrawAmount))
                             {
-                                Console.WriteLine($"Withdrew {withdrawAmount} successfully.");
+                                Console.WriteLine($"Withdrew {withdrawAmount:C} successfully.");
                             }
-                            Console.WriteLine("Withdraw error");
+                            else
+                            {
+                                WriteError("Withdrawal failed.");
+                            }
                             break;
+
                         case "5":
-                            Console.WriteLine(proxy.GetBalance(username));
+                            Console.WriteLine($"Current Balance: {proxy.GetBalance(username):C}");
                             break;
+
                         case "6":
                             var activeAccounts = proxy.GetActiveUserAccounts();
-                            if (activeAccounts == null)
+                            if (activeAccounts == null || !activeAccounts.Any())
                             {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("No active user accounts found.");
-                                Console.ResetColor();
+                                WriteError("No active user accounts found.");
                             }
                             else
                             {
@@ -200,38 +231,29 @@ namespace Client
                             return;
 
                         default:
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Invalid option. Please try again.");
-                            Console.ResetColor();
+                            WriteError("Invalid option. Please try again.");
                             break;
                     }
                 }
                 catch (FaultException<SecurityException> faultEx)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"An error occurred: {faultEx.Detail.Message}");
-                    Console.ResetColor();
+                    WriteError($"Security error: {faultEx.Detail.Message}");
                 }
                 catch (FaultException fault)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("An error occurred: " + fault.Message);
-                    Console.ResetColor();
+                    WriteError($"Fault error: {fault.Message}");
                 }
                 catch (CommunicationException commEx)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine("An error occurred: " + commEx.Message);
-                    Console.ResetColor();
+                    WriteError($"Communication error: {commEx.Message}");
                 }
                 catch (Exception ex)
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"An error occurred: {ex.Message}");
-                    Console.ResetColor();
+                    WriteError($"General error: {ex.Message}");
                 }
             }
         }
+
         private static string ParseName(string winLogonName)
         {
             string[] parts = new string[] { };
@@ -280,6 +302,20 @@ namespace Client
             {
                 store.Close();
             }
+        }
+
+        private static void WriteError(string message)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"ERROR: {message}");
+            Console.ResetColor();
+        }
+
+        private static void WriteSuccess(string message)
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(message);
+            Console.ResetColor();
         }
     }
 }

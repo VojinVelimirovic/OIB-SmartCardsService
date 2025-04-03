@@ -4,13 +4,13 @@ using System.ServiceModel;
 
 namespace Client
 {
-    internal class ClientProxy : ChannelFactory<IATMService>, IATMService, IDisposable
+    internal class ClientProxyATM : ChannelFactory<IATMService>, IATMService, IDisposable
     {
-        IATMService factory;
+        IATMService _atmService;
 
-        public ClientProxy(NetTcpBinding binding, string address) : base(binding, address)
+        public ClientProxyATM(NetTcpBinding binding, string address) : base(binding, address)
         {
-            factory = this.CreateChannel();
+            _atmService = this.CreateChannel();
         }
         public bool TestConnection()
         {
@@ -26,35 +26,35 @@ namespace Client
 
         public bool Ping()
         {
-            return factory.Ping();
+            return _atmService.Ping();
         }
 
         public bool AuthenticateUser(string username, int pin)
         {
-            return factory.AuthenticateUser(username, pin);
+            return _atmService.AuthenticateUser(username, pin);
         }
         public double? GetBalance(string username)
         {
-            return factory.GetBalance(username);
+            return _atmService.GetBalance(username);
         }
         public bool Deposit(string username, double amount)
         {
-            return factory.Deposit(username, amount);
+            return _atmService.Deposit(username, amount);
         }
 
         public bool Withdraw(string username, double amount)
         {
-            return factory.Withdraw(username, amount);
+            return _atmService.Withdraw(username, amount);
         }
 
         public string[] GetActiveUserAccounts()
         {
-            return factory.GetActiveUserAccounts();
+            return _atmService.GetActiveUserAccounts();
         }
         protected override void OnClosed()
         {
             base.OnClosed();
-            if (factory is IClientChannel clientChannel)
+            if (_atmService is IClientChannel clientChannel)
             {
                 if (clientChannel.State == CommunicationState.Faulted)
                     clientChannel.Abort();
