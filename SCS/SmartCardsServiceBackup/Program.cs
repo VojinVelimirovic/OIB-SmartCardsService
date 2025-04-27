@@ -1,12 +1,8 @@
 ﻿using Common;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security.Principal;
 using System.ServiceModel;
-using System.Text;
-using System.Threading.Tasks;
-using SmartCardsService;
+using System.Security.Cryptography.X509Certificates;
+using System.ServiceModel.Security;
 
 namespace SmartCardsServiceBackup
 {
@@ -15,22 +11,28 @@ namespace SmartCardsServiceBackup
         static void Main(string[] args)
         {
             NetTcpBinding binding = new NetTcpBinding();
-            binding.Security.Mode = SecurityMode.Transport;
-            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
-            binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
+            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
 
-            string backupServerAddress = "net.tcp://localhost:9998/SmartCardsService";
-
+            string address = "net.tcp://localhost:9998/SmartCardsService";
             ServiceHost host = new ServiceHost(typeof(SmartCardsService.SmartCardsService));
-            host.AddServiceEndpoint(typeof(ISmartCardsService), binding, backupServerAddress);
-            host.Open();
+            host.AddServiceEndpoint(typeof(ISmartCardsService), binding, address);
 
-            Console.WriteLine("Backup server is running at: " + backupServerAddress);
-            Console.WriteLine("User running the backup server: " + WindowsIdentity.GetCurrent().Name);
-            Console.WriteLine("Press Enter to stop the server.");
+            host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+            host.Credentials.ClientCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+            host.Credentials.ServiceCertificate.Certificate = CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "wcfservice");
 
-            Console.ReadLine();
-            host.Close();
+            try
+            {
+                host.Open();
+                Console.WriteLine("SmartCardsService Backup is running at: " + address);
+                Console.WriteLine("Press Enter to stop the service.");
+                Console.ReadLine();
+                host.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SmartCardsService Backup failed to start: {ex.Message}");
+            }
         }
     }
 }

@@ -1,15 +1,11 @@
 ﻿using Common;
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.ServiceModel;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Security.Cryptography;
 using System.IO;
 using System.Text.Json;
-using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
 
 namespace SmartCardsService
@@ -19,8 +15,6 @@ namespace SmartCardsService
     {
         private readonly string folderPath;
         private readonly string backupServerAddress = "net.tcp://backuphost:9998/SmartCardsService";
-
-
         public SmartCardsService()
         {
             string solutionDir = GetSolutionDirectory();
@@ -39,16 +33,9 @@ namespace SmartCardsService
             return Thread.CurrentPrincipal.IsInRole("SmartCardUser") || Thread.CurrentPrincipal.IsInRole("Manager");
         }
 
-        public bool TestCommunication()
+        public void TestCommunication()
         {
-            if (!IsUserInValidGroup())
-            {
-                string name = Thread.CurrentPrincipal.Identity.Name;
-                string exceptionMessage = String.Format
-                    ("Access is denied.\n User {0} tried to call TestCommunication method (time: {1}).\n ", name, DateTime.Now.TimeOfDay);
-                return false;
-            }
-            return true;
+            Console.WriteLine("Communication established.");
         }
 
         public void CreateSmartCard(string username, int pin)
@@ -246,6 +233,11 @@ namespace SmartCardsService
                                .ToList();
 
             return parts.Count > 0 ? parts[0].Substring(3) : null;
+        }
+
+        public void SignedMessage(SignedRequest request)
+        {
+            Console.WriteLine("Intermediary message received");
         }
     }
 }

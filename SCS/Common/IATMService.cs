@@ -8,6 +8,13 @@ namespace Common
     {
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
+        void TestCommunication();
+
+        [OperationContract]
+        void SignedMessage(SignedRequest request);
+
+        [OperationContract]
+        [FaultContract(typeof(SecurityException))]
         bool AuthenticateUser(string username, int pin);
 
         [OperationContract]

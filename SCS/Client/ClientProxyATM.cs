@@ -1,66 +1,94 @@
 ﻿using Common;
 using System;
+using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 using System.ServiceModel;
+using System.ServiceModel.Security;
 
 namespace Client
 {
     internal class ClientProxyATM : ChannelFactory<IATMService>, IATMService, IDisposable
     {
-        IATMService _atmService;
+        IATMService factory;
 
-        public ClientProxyATM(NetTcpBinding binding, string address) : base(binding, address)
+        public ClientProxyATM(NetTcpBinding binding, EndpointAddress address) 
+            : base(binding, address)
         {
-            _atmService = this.CreateChannel();
+            this.Credentials.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+            this.Credentials.ServiceCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+
+            string clientName = CertManager.ParseName(WindowsIdentity.GetCurrent().Name);
+            string certCN = clientName + "_sign";
+
+            this.Credentials.ClientCertificate.SetCertificate(
+                StoreLocation.LocalMachine,
+                StoreName.My,
+                X509FindType.FindBySubjectName,
+                certCN
+            );
+            factory = this.CreateChannel();
         }
-        public bool TestConnection()
+
+        public void TestCommunication()
         {
             try
             {
-                return this.Ping(); // Call the Ping method on the server
+                factory.TestCommunication();
+                Console.WriteLine("[ATM PROXY] Request successfully forwarded");
             }
-            catch
+            catch (Exception ex)
             {
-                return false; // If the call fails, the server is unreachable
+                Console.WriteLine($"[ATM PROXY] ATM reported failure: {ex.Message}");
+                throw; // Re-throw to maintain exception propagation
             }
+        }
+        public void SignedMessage(SignedRequest request)
+        {
+            factory.SignedMessage(request);
         }
 
         public bool Ping()
         {
-            return _atmService.Ping();
+            return factory.Ping();
         }
-
         public bool AuthenticateUser(string username, int pin)
         {
-            return _atmService.AuthenticateUser(username, pin);
+            return factory.AuthenticateUser(username, pin);
         }
         public double? GetBalance(string username)
         {
-            return _atmService.GetBalance(username);
+            return factory.GetBalance(username);
         }
         public bool Deposit(string username, double amount)
         {
-            return _atmService.Deposit(username, amount);
+            return factory.Deposit(username, amount);
         }
-
         public bool Withdraw(string username, double amount)
         {
-            return _atmService.Withdraw(username, amount);
+            return factory.Withdraw(username, amount);
         }
-
         public string[] GetActiveUserAccounts()
         {
-            return _atmService.GetActiveUserAccounts();
+            return factory.GetActiveUserAccounts();
         }
         protected override void OnClosed()
         {
             base.OnClosed();
-            if (_atmService is IClientChannel clientChannel)
+            if (factory is IClientChannel clientChannel)
             {
                 if (clientChannel.State == CommunicationState.Faulted)
                     clientChannel.Abort();
                 else
                     clientChannel.Close();
             }
+        }
+        public void Dispose()
+        {
+            if (factory != null)
+            {
+                ((IClientChannel)factory).Close();
+            }
+            this.Close();
         }
     }
 }

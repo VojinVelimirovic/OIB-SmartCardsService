@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.ServiceModel;
@@ -12,114 +11,226 @@ namespace Client
     {
         static void Main(string[] args)
         {
-            // Configure binding with both certificate and Windows auth
             NetTcpBinding binding = new NetTcpBinding();
-            binding.Security.Mode = SecurityMode.TransportWithMessageCredential;
             binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
-            binding.Security.Message.ClientCredentialType = MessageCredentialType.Windows;
-            binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
 
-            string atmAddress = "net.tcp://localhost:8888/ATMService";
-            string scsAddress = "net.tcp://localhost:9999/SmartCardsService";
+            // 1) serviceBinding: mutual‐TLS (client+server cert)
+            var serviceBinding = new NetTcpBinding(SecurityMode.Transport);
+            serviceBinding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
 
-            // Get current Windows user identity
-            WindowsIdentity windowsIdentity = WindowsIdentity.GetCurrent();
-            string userName = ParseName(windowsIdentity.Name);
+            // 2) atmBinding: TLS with server cert only (chain‐trust), no client cert
+            var atmBinding = new NetTcpBinding(SecurityMode.Transport);
+            atmBinding.Security.Transport.ClientCredentialType = TcpClientCredentialType.None;
 
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("Current user: " + windowsIdentity.Name);
+            var srvCert = CertManager.GetCertificateFromStorage(StoreName.TrustedPeople, StoreLocation.LocalMachine, "wcfservice");
+            var interCert = CertManager.GetCertificateFromStorage(StoreName.TrustedPeople, StoreLocation.LocalMachine, "oib_atm");
 
-            X509Certificate2 clientCert = GetClientCertificate(userName);
-            if (clientCert == null)
+            // Direct service endpoints
+            EndpointAddress primaryAddress = new EndpointAddress(
+               new Uri("net.tcp://localhost:9999/SmartCardsService"),
+               new X509CertificateEndpointIdentity(srvCert) // attach expected server certificate
+           );
+            EndpointAddress backupAddress = new EndpointAddress(
+                new Uri("net.tcp://localhost:9998/SmartCardsService"),
+                new X509CertificateEndpointIdentity(srvCert) // attach expected server certificate
+            );
+
+            // ATM endpoint
+            EndpointAddress atmAddress = new EndpointAddress(
+                new Uri("net.tcp://localhost:10000/ATMService"),
+                new X509CertificateEndpointIdentity(interCert)
+            );
+
+            EndpointAddress currentAddress = primaryAddress;
+
+            Console.WriteLine("Current user: " + CertManager.ParseName(WindowsIdentity.GetCurrent().Name));
+
+            // Create proxies
+            using (var scsProxy = new ClientProxySCS(serviceBinding, currentAddress))
+            using (var atmProxy = new ClientProxyATM(atmBinding, atmAddress))
             {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"ERROR: No valid certificate found for user '{userName}'");
-                Console.ResetColor();
-                Console.ReadLine();
-                return;
-            }
+                Console.WriteLine("Test Commands:");
+                Console.WriteLine("'d' - Test Service connection");
+                Console.WriteLine("'s' - Test ATM connection (digital signatures)");
+                Console.WriteLine("Any other key - Continue to application");
 
-            try
-            {
-                using (ClientProxyATM atmProxy = new ClientProxyATM(binding, atmAddress))
+                while (true)
                 {
-                    // Set client credentials directly on the proxy
-                    atmProxy.Credentials.ClientCertificate.Certificate = clientCert;
-                    atmProxy.Credentials.Windows.AllowedImpersonationLevel = TokenImpersonationLevel.Impersonation;
+                    var key = Console.ReadKey(intercept: true);
+
+                    if (key.KeyChar == 'd' || key.KeyChar == 'D')
                     {
-                        Console.WriteLine("Checking connection to ATM...");
-
-                        try
-                        {
-                            if (atmProxy.TestConnection())
-                            {
-                                Console.ForegroundColor = ConsoleColor.Green;
-                                Console.WriteLine("Connection to ATM established successfully.");
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Connection test failed. Exiting...");
-                                return;
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Failed to establish connection: " + ex.Message);
-                            return;
-                        }
-
-                        Console.ForegroundColor = ConsoleColor.Cyan;
-                        Console.WriteLine("Authenticating user...");
-
-                        string username = "Marko";
-                        bool isAuthenticated = atmProxy.AuthenticateUser(username, 1234);
-
-                        if (isAuthenticated)
-                        {
-                            Console.ForegroundColor = ConsoleColor.Green;
-                            Console.WriteLine("Authenticated! Welcome {0}!", username);
-                            Console.ResetColor();
-                            Menu(atmProxy, username);
-                        }
-                        else
-                        {
-                            Console.ForegroundColor = ConsoleColor.Red;
-                            Console.WriteLine("Authentication failed.");
-                            Console.ResetColor();
-                        }
+                        TestServiceConnection(serviceBinding, ref currentAddress, primaryAddress, backupAddress);
+                    }
+                    else if (key.KeyChar == 's' || key.KeyChar == 'S')
+                    {
+                        TestSignedMessage(atmBinding, atmAddress);
+                    }
+                    else
+                    {
+                        break;
                     }
                 }
+                ShowMenu(scsProxy, atmProxy, ref currentAddress, primaryAddress, backupAddress);
             }
-            catch (Exception ex)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("Error: " + ex.Message);
-                Console.ResetColor();
-            }
+        }
 
+        private static void ShowMenu(
+            ClientProxySCS scsProxy,
+            ClientProxyATM atmProxy,
+            ref EndpointAddress currentAddress,
+            EndpointAddress primaryAddress,
+            EndpointAddress backupAddress)
+        {
+            string username = CertManager.ParseName(WindowsIdentity.GetCurrent().Name);
+            while (true)
+            {
+                Console.WriteLine("\n--- Client Menu ---");
+                Console.WriteLine("'d' - Test Service connection");
+                Console.WriteLine("'s' - Test ATM connection (digital signatures)");
+                Console.WriteLine("1. SmartCardsService/Create Smart Card");
+                Console.WriteLine("2. SmartCardsService/Change PIN");
+                Console.WriteLine("3. ATM/Deposit Funds");
+                Console.WriteLine("4. ATM/Withdraw Funds");
+                Console.WriteLine("5. ATM/View Balance");
+                Console.WriteLine("6. SmartCardsService/View Active User Accounts (Manager Only)");
+                Console.WriteLine("7. Switch SmartCardsService Endpoint Manually");
+                Console.WriteLine("8. Exit");
+                Console.Write("Choose an option: ");
+
+                var choice = Console.ReadLine();
+
+                try
+                {
+                    switch (choice)
+                    {
+                        case "1": // Create Smart Card
+                            Console.Write("Enter username: ");
+                            var newUser = Console.ReadLine();
+                            Console.Write("Enter 4-digit PIN: ");
+                            if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
+                            {
+                                WriteError("Invalid PIN. Must be a 4-digit number.");
+                                break;
+                            }
+                            scsProxy.CreateSmartCard(newUser, pin);
+                            Console.WriteLine("Smart card created successfully.");
+                            break;
+
+                        case "2": // Change PIN
+                            Console.Write("Enter username: ");
+                            var changeUser = Console.ReadLine();
+                            Console.Write("Enter current PIN: ");
+                            if (!int.TryParse(Console.ReadLine(), out int currentPin) || currentPin < 1000 || currentPin > 9999)
+                            {
+                                WriteError("Invalid current PIN. Must be a 4-digit number.");
+                                break;
+                            }
+                            Console.Write("Enter new 4-digit PIN: ");
+                            if (!int.TryParse(Console.ReadLine(), out int newPin) || newPin < 1000 || newPin > 9999)
+                            {
+                                WriteError("Invalid new PIN. Must be a 4-digit number.");
+                                break;
+                            }
+                            scsProxy.UpdatePin(changeUser, currentPin, newPin);
+                            Console.WriteLine("PIN updated successfully.");
+                            break;
+
+                        case "3": // Deposit
+                            Console.Write("Enter amount to deposit: ");
+                            if (!double.TryParse(Console.ReadLine(), out double depositAmount) || depositAmount <= 0)
+                            {
+                                WriteError("Invalid deposit amount.");
+                                break;
+                            }
+                            if (atmProxy.Deposit(username, depositAmount))
+                                Console.WriteLine($"Deposited {depositAmount:C} successfully.");
+                            else
+                                WriteError("Deposit failed.");
+                            break;
+
+                        case "4": // Withdraw
+                            Console.Write("Enter amount to withdraw: ");
+                            if (!double.TryParse(Console.ReadLine(), out double withdrawAmount) || withdrawAmount <= 0)
+                            {
+                                WriteError("Invalid withdrawal amount.");
+                                break;
+                            }
+                            if (atmProxy.Withdraw(username, withdrawAmount))
+                                Console.WriteLine($"Withdrew {withdrawAmount:C} successfully.");
+                            else
+                                WriteError("Withdrawal failed.");
+                            break;
+
+                        case "5": // View Balance
+                            Console.WriteLine($"Current Balance: {atmProxy.GetBalance(username):C}");
+                            break;
+
+                        case "6": // View Active Accounts
+                            //var accounts = scsProxy.GetActiveUserAccounts();
+                            //if (accounts == null || !accounts.Any())
+                            //    WriteError("No active user accounts found.");
+                            //else
+                            //{
+                            //    Console.WriteLine("Active User Accounts:");
+                            //    foreach (var acct in accounts)
+                            //        Console.WriteLine(acct);
+                            //}
+                            break;
+
+                        case "7": // Switch endpoint
+                            SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
+                            break;
+
+                        case "8":
+                            Console.WriteLine("Exiting...");
+                            return;
+
+                        default:
+                            WriteError("Invalid option. Please try again.");
+                            break;
+                    }
+                }
+                catch (FaultException<SecurityException> secEx)
+                {
+                    WriteError($"Security error: {secEx.Detail.Message}");
+                }
+                catch (FaultException fault)
+                {
+                    WriteError($"Service fault: {fault.Message}");
+                }
+                catch (CommunicationException commEx)
+                {
+                    WriteError($"Communication error: {commEx.Message}");
+                }
+                catch (Exception ex)
+                {
+                    WriteError($"General error: {ex.Message}");
+                }
+            }
+        }
+
+        private static void SwitchEndpoint(ref EndpointAddress currentAddress, EndpointAddress primary, EndpointAddress backup)
+        {
+            currentAddress = currentAddress == primary ? backup : primary;
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine("Press Enter to exit.");
+            Console.WriteLine($"[SmartCardsService] Switched to {(currentAddress == primary ? "primary" : "backup")} endpoint {currentAddress.Uri}");
             Console.ResetColor();
-            Console.ReadLine();
         }
 
         private static void Menu(ClientProxyATM proxy, string username)
         {
             while (true)
             {
-                Console.ForegroundColor = ConsoleColor.Cyan;
                 Console.WriteLine("\n--- Client Menu ---");
-                Console.WriteLine("1. Create Smart Card");
-                Console.WriteLine("2. Change PIN");
-                Console.WriteLine("3. Deposit Funds");
-                Console.WriteLine("4. Withdraw Funds");
-                Console.WriteLine("5. View Balance");
-                Console.WriteLine("6. View Active User Accounts (Manager Only)");
+                Console.WriteLine("1. SmartCardsService/Create Smart Card");
+                Console.WriteLine("2. SmartCardsService/Change PIN");
+                Console.WriteLine("3. ATM/Deposit Funds");
+                Console.WriteLine("4. ATM/Withdraw Funds");
+                Console.WriteLine("5. ATM/View Balance");
+                Console.WriteLine("6. SmartCardsService/View Active User Accounts (Manager Only)");
                 Console.WriteLine("7. Exit");
                 Console.Write("Choose an option: ");
-                Console.ResetColor();
 
                 string choice = Console.ReadLine();
 
@@ -254,56 +365,62 @@ namespace Client
             }
         }
 
-        private static string ParseName(string winLogonName)
+        static void TestSignedMessage(NetTcpBinding binding, EndpointAddress intermediaryAddress)
         {
-            string[] parts = new string[] { };
-
-            if (winLogonName.Contains("@"))
-            {
-                ///UPN format
-                parts = winLogonName.Split('@');
-                return parts[0];
-            }
-            else if (winLogonName.Contains("\\"))
-            {
-                /// SPN format
-                parts = winLogonName.Split('\\');
-                return parts[1];
-            }
-            else
-            {
-                return winLogonName;
-            }
-        }
-        private static X509Certificate2 GetClientCertificate(string userName)
-        {
-            string ou = userName == "oib_manager" ? "Manager" :
-                       userName == "oib_smartcarduser" ? "SmartCardUser" :
-                       string.Empty;
-
-            if (string.IsNullOrEmpty(ou))
-                return null;
-
-            var store = new X509Store(StoreName.My, StoreLocation.LocalMachine);
-            store.Open(OpenFlags.ReadOnly);
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("\n[INTERMEDIARY - SIGNED] Sending signed message...");
+            Console.ResetColor();
 
             try
             {
-                foreach (X509Certificate2 cert in store.Certificates)
+                using (var proxy = new ClientProxyATM(binding, intermediaryAddress))
                 {
-                    if (cert.Subject == $"CN={userName}, OU={ou}" && cert.HasPrivateKey)
+                    string msg = "This is a signed message.";
+                    string clientName = CertManager.ParseName(WindowsIdentity.GetCurrent().Name);
+                    string certCN = clientName + "_sign";
+
+                    var cert = CertManager.GetClientCertificate(certCN);
+                    var signature = DigitalSignature.Create(msg, HashAlgorithm.SHA1, cert);
+
+                    var request = new SignedRequest
                     {
-                        return cert;
-                    }
+                        Message = msg,
+                        Signature = signature,
+                        SenderName = clientName
+                    };
+
+                    proxy.SignedMessage(request);
+                    Console.WriteLine("[INTERMEDIARY - SIGNED] Sent successfully.");
                 }
-                return null;
             }
-            finally
+            catch (Exception ex)
             {
-                store.Close();
+                Console.WriteLine($"[INTERMEDIARY - SIGNED] Failed: {ex.Message}");
             }
         }
 
+        static void TestServiceConnection(NetTcpBinding binding, ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine("\n[SmartCardsService] Attempting connection...");
+            Console.ResetColor();
+
+            try
+            {
+                // NOTE: When an exception is thrown proxy goes to a proxy state from which he can't recover
+                // Meaning that a new proxy needs to be created if an exception is thrown
+                using (var proxy = new ClientProxySCS(binding, currentAddress))
+                {
+                    proxy.TestCommunication();
+                    Console.WriteLine($"[SmartCardsService] Success at: {currentAddress.Uri}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SmartCardsService] Failed at {currentAddress.Uri}: {ex.Message}");
+                SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
+            }
+        }
         private static void WriteError(string message)
         {
             Console.ForegroundColor = ConsoleColor.Red;

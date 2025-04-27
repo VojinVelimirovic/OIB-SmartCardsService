@@ -13,7 +13,7 @@ namespace ATM
             binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
             binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
 
-            string address = "net.tcp://localhost:8888/ATMService";
+            string address = "net.tcp://localhost:10000/ATMService";
             ServiceHost host = new ServiceHost(typeof(ATMService));
             host.AddServiceEndpoint(typeof(IATMService), binding, address);
 

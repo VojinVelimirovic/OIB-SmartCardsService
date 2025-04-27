@@ -12,7 +12,9 @@ namespace Common
     {
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        bool TestCommunication();
+        void TestCommunication();
+        [OperationContract]
+        void SignedMessage(SignedRequest request);
 
         [OperationContract]
         void CreateSmartCard(string username, int pin);
