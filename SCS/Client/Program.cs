@@ -45,32 +45,16 @@ namespace Client
 
             Console.WriteLine("Current user: " + CertManager.ParseName(WindowsIdentity.GetCurrent().Name));
 
+            TestConnection(serviceBinding, atmBinding, ref currentAddress, primaryAddress, backupAddress, atmAddress);
+
+            // TODO: Incorrect, proxies need to be recreated or don't use exceptions in bussiness logic
+            // When an exception is thrown proxy goes to a faulted state from which it can't recover
+            // Meaning that a new proxy needs to be created if an exception is thrown
             // Create proxies
             using (var scsProxy = new ClientProxySCS(serviceBinding, currentAddress))
             using (var atmProxy = new ClientProxyATM(atmBinding, atmAddress))
             {
-                Console.WriteLine("Test Commands:");
-                Console.WriteLine("'d' - Test Service connection");
-                Console.WriteLine("'s' - Test ATM connection (digital signatures)");
-                Console.WriteLine("Any other key - Continue to application");
 
-                while (true)
-                {
-                    var key = Console.ReadKey(intercept: true);
-
-                    if (key.KeyChar == 'd' || key.KeyChar == 'D')
-                    {
-                        TestServiceConnection(serviceBinding, ref currentAddress, primaryAddress, backupAddress);
-                    }
-                    else if (key.KeyChar == 's' || key.KeyChar == 'S')
-                    {
-                        TestSignedMessage(atmBinding, atmAddress);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
                 ShowMenu(scsProxy, atmProxy, ref currentAddress, primaryAddress, backupAddress);
             }
         }
@@ -368,7 +352,7 @@ namespace Client
         static void TestSignedMessage(NetTcpBinding binding, EndpointAddress intermediaryAddress)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine("\n[INTERMEDIARY - SIGNED] Sending signed message...");
+            Console.WriteLine("\n[ATM - SIGNED] Sending signed message...");
             Console.ResetColor();
 
             try
@@ -390,12 +374,12 @@ namespace Client
                     };
 
                     proxy.SignedMessage(request);
-                    Console.WriteLine("[INTERMEDIARY - SIGNED] Sent successfully.");
+                    Console.WriteLine("[ATM - SIGNED] Sent successfully.");
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[INTERMEDIARY - SIGNED] Failed: {ex.Message}");
+                Console.WriteLine($"[ATM - SIGNED] Failed: {ex.Message}");
             }
         }
 
@@ -407,7 +391,7 @@ namespace Client
 
             try
             {
-                // NOTE: When an exception is thrown proxy goes to a proxy state from which he can't recover
+                // NOTE: When an exception is thrown proxy goes to a faulted state from which he can't recover
                 // Meaning that a new proxy needs to be created if an exception is thrown
                 using (var proxy = new ClientProxySCS(binding, currentAddress))
                 {
@@ -426,6 +410,34 @@ namespace Client
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"ERROR: {message}");
             Console.ResetColor();
+        }
+
+        public static void TestConnection(NetTcpBinding serviceBinding, NetTcpBinding atmBinding, 
+            ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress, EndpointAddress atmAddress)
+        {
+            Console.WriteLine("Test Commands:");
+            Console.WriteLine("'d' - Test Service connection");
+            Console.WriteLine("'s' - Test ATM connection (digital signatures)");
+            Console.WriteLine("Any other key - Continue to application");
+
+
+            while (true)
+            {
+                var key = Console.ReadKey(intercept: true);
+
+                if (key.KeyChar == 'd' || key.KeyChar == 'D')
+                {
+                    TestServiceConnection(serviceBinding, ref currentAddress, primaryAddress, backupAddress);
+                }
+                else if (key.KeyChar == 's' || key.KeyChar == 'S')
+                {
+                    TestSignedMessage(atmBinding, atmAddress);
+                }
+                else
+                {
+                    break;
+                }
+            }
         }
 
         private static void WriteSuccess(string message)

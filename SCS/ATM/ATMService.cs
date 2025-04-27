@@ -16,7 +16,6 @@ namespace ATM
     public class ATMService : IATMService
     {
         private readonly InMemoryDatabase _database;
-        private ISmartCardsService smartCardService;
         private bool isAuthenticated = false;
 
         private readonly NetTcpBinding _binding;
@@ -36,20 +35,37 @@ namespace ATM
             var serviceCert = CertManager.GetCertificateFromStorage(StoreName.TrustedPeople, StoreLocation.LocalMachine, "wcfservice");
 
             _primaryAddress = new EndpointAddress(
-                new Uri("net.tcp://localhost:9999/SmartCardService"),
+                new Uri("net.tcp://localhost:9999/SmartCardsService"),
                 new X509CertificateEndpointIdentity(serviceCert)
             );
             _backupAddress = new EndpointAddress(
-                new Uri("net.tcp://localhost:9998/SmartCardService"),
+                new Uri("net.tcp://localhost:9998/SmartCardsService"),
                 new X509CertificateEndpointIdentity(serviceCert)
             );
 
             _database = InMemoryDatabase.Instance;
-            
         }
-        public bool Ping()
+        public void TestCommunication()
         {
-            return true; // Just returns true if the server is reachable
+            Console.WriteLine($"Client called Intermediary at {DateTime.Now}");
+
+            bool success = TryForwardRequest(_usePrimary ? _primaryAddress : _backupAddress);
+
+            if (!success)
+            {
+                // Switch endpoint and retry
+                _usePrimary = !_usePrimary;
+
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"Switched to {(_usePrimary ? "primary" : "backup")} endpoint");
+                Console.ResetColor();
+                success = TryForwardRequest(_usePrimary ? _primaryAddress : _backupAddress);
+            }
+
+            if (!success)
+            {
+                throw new EndpointNotFoundException("Both service endpoints are unavailable");
+            }
         }
 
         //private void ConnectToSmartCardService()
@@ -100,7 +116,8 @@ namespace ATM
         {
             try
             {
-                return isAuthenticated = smartCardService.ValidateSmartCard(username, pin);
+                return false;
+                //return isAuthenticated = smartCardService.ValidateSmartCard(username, pin);
             }
             catch (CommunicationException)
             {
@@ -165,11 +182,6 @@ namespace ATM
             // TODO: Send a request to SmartCardService
             
             //return accountBalances.Keys.ToArray();
-        }
-
-        public void TestCommunication()
-        {
-            throw new NotImplementedException();
         }
 
         public void SignedMessage(SignedRequest request)
@@ -267,10 +279,9 @@ namespace ATM
 
         private bool TryForwardRequest(EndpointAddress address)
         {
-
             try
             {
-                using (var factory = new ChannelFactory<ATMService>(_binding, address))
+                using (var factory = new ChannelFactory<ISmartCardsService>(_binding, address))
                 {
 
                     factory.Credentials.ClientCertificate.Certificate =

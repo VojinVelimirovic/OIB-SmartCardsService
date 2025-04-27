@@ -47,10 +47,6 @@ namespace Client
             factory.SignedMessage(request);
         }
 
-        public bool Ping()
-        {
-            return factory.Ping();
-        }
         public bool AuthenticateUser(string username, int pin)
         {
             return factory.AuthenticateUser(username, pin);

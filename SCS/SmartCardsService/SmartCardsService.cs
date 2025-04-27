@@ -37,6 +37,10 @@ namespace SmartCardsService
         {
             Console.WriteLine("Communication established.");
         }
+        public void SignedMessage(SignedRequest request)
+        {
+            Console.WriteLine("ATM message received");
+        }
 
         public void CreateSmartCard(string username, int pin)
         {
@@ -235,9 +239,6 @@ namespace SmartCardsService
             return parts.Count > 0 ? parts[0].Substring(3) : null;
         }
 
-        public void SignedMessage(SignedRequest request)
-        {
-            Console.WriteLine("Intermediary message received");
-        }
+
     }
 }
