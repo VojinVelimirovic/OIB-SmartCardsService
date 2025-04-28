@@ -45,7 +45,7 @@ namespace Client
 
             Console.WriteLine("Current user: " + CertManager.ParseName(WindowsIdentity.GetCurrent().Name));
 
-            TestConnection(serviceBinding, atmBinding, ref currentAddress, primaryAddress, backupAddress, atmAddress);
+            //TestConnection(serviceBinding, atmBinding, ref currentAddress, primaryAddress, backupAddress, atmAddress);
 
             // TODO: Incorrect, proxies need to be recreated or don't use exceptions in bussiness logic
             // When an exception is thrown proxy goes to a faulted state from which it can't recover
@@ -70,8 +70,6 @@ namespace Client
             while (true)
             {
                 Console.WriteLine("\n--- Client Menu ---");
-                Console.WriteLine("'d' - Test Service connection");
-                Console.WriteLine("'s' - Test ATM connection (digital signatures)");
                 Console.WriteLine("1. SmartCardsService/Create Smart Card");
                 Console.WriteLine("2. SmartCardsService/Change PIN");
                 Console.WriteLine("3. ATM/Deposit Funds");
@@ -89,6 +87,7 @@ namespace Client
                     switch (choice)
                     {
                         case "1": // Create Smart Card
+                            // TODO: get username based on current user username?
                             Console.Write("Enter username: ");
                             var newUser = Console.ReadLine();
                             Console.Write("Enter 4-digit PIN: ");
@@ -116,8 +115,15 @@ namespace Client
                                 WriteError("Invalid new PIN. Must be a 4-digit number.");
                                 break;
                             }
-                            scsProxy.UpdatePin(changeUser, currentPin, newPin);
-                            Console.WriteLine("PIN updated successfully.");
+                            try
+                            {
+                                scsProxy.UpdatePin(changeUser, currentPin, newPin);
+                                Console.WriteLine("PIN updated successfully.");
+                            }
+                            catch (FaultException ex) // Catch general fault exceptions
+                            {
+                                WriteError(ex.Message); // This will show the service's error message
+                            }
                             break;
 
                         case "3": // Deposit
@@ -411,7 +417,6 @@ namespace Client
             Console.WriteLine($"ERROR: {message}");
             Console.ResetColor();
         }
-
         public static void TestConnection(NetTcpBinding serviceBinding, NetTcpBinding atmBinding, 
             ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress, EndpointAddress atmAddress)
         {
@@ -440,11 +445,5 @@ namespace Client
             }
         }
 
-        private static void WriteSuccess(string message)
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine(message);
-            Console.ResetColor();
-        }
     }
 }

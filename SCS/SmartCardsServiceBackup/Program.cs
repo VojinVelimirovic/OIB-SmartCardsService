@@ -11,11 +11,18 @@ namespace SmartCardsServiceBackup
         static void Main(string[] args)
         {
             NetTcpBinding binding = new NetTcpBinding();
+            binding.Security.Mode = SecurityMode.Transport;
             binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
 
+            NetTcpBinding replicationBinding = new NetTcpBinding();
+            replicationBinding.Security.Mode = SecurityMode.None;
+
             string address = "net.tcp://localhost:9998/SmartCardsService";
+            string replicationAddress = "net.tcp://localhost:9000/SmartCardsReplication";
+
             ServiceHost host = new ServiceHost(typeof(SmartCardsService.SmartCardsService));
             host.AddServiceEndpoint(typeof(ISmartCardsService), binding, address);
+            host.AddServiceEndpoint(typeof(ISmartCardsService), replicationBinding, replicationAddress);
 
             host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
             host.Credentials.ClientCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;

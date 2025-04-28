@@ -52,5 +52,10 @@ namespace Client
         {
             throw new NotImplementedException();
         }
+
+        public void ReplicateSmartCard(SmartCard card)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
