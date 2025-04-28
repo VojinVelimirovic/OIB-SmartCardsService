@@ -10,6 +10,7 @@ using System.ServiceModel.Channels;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.ServiceModel.Security;
+using System.Net;
 
 namespace ATM
 {
@@ -106,25 +107,67 @@ namespace ATM
         //    }
         //}
 
-        private ISmartCardsService CreateChannel(NetTcpBinding binding, string address)
-        {
-            ChannelFactory<ISmartCardsService> factory = new ChannelFactory<ISmartCardsService>(binding, new EndpointAddress(address));
-            return factory.CreateChannel();
-        }
-
         public bool AuthenticateUser(string username, int pin)
         {
             try
             {
-                return false;
-                //return isAuthenticated = smartCardService.ValidateSmartCard(username, pin);
+                Console.WriteLine($"Authenticating user '{username}' with SmartCardsService...");
+
+                // TODO: Make it work with backup
+                using (var factory = new ChannelFactory<ISmartCardsService>(_binding, _primaryAddress))
+                {
+
+                    factory.Credentials.ClientCertificate.Certificate =
+                        CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "oib_atm");
+
+                    factory.Credentials.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+                    factory.Credentials.ServiceCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+                    factory.Credentials.ServiceCertificate.Authentication.TrustedStoreLocation = StoreLocation.LocalMachine;
+
+                    var channel = factory.CreateChannel();
+                    bool response = channel.ValidateSmartCard(username, pin);
+                    ((IClientChannel)channel).Close();
+
+                    if (response)
+                        ColorfulConsole.WriteSuccess($"User '{username}' successfully authenticated.");
+                    else
+                        ColorfulConsole.WriteError($"Authentication failed for user '{username}'. Invalid credentials.");
+                    
+                    isAuthenticated = response;
+                    return response;
+                }
             }
-            catch (CommunicationException)
+            catch (Exception ex)
             {
-                Console.WriteLine("Lost connection to SmartCardsService. Reconnecting...");
-                //ConnectToSmartCardService();
+                Console.WriteLine($"Failed to forward to {_primaryAddress.Uri}: {ex}");
                 return false;
             }
+
+            //ISmartCardsService proxy = null;
+            //IClientChannel channel = null;
+
+            //try
+            //{
+            //    var factory = new ChannelFactory<ISmartCardsService>(_binding, _primaryAddress);
+
+            //    proxy = factory.CreateChannel();
+            //    channel = (IClientChannel)proxy;
+            //    bool response = proxy.ValidateSmartCard(username, pin);
+            //    channel.Close();
+            //    factory.Close();
+
+            //    return response;
+            //}
+            //catch (Exception ex)
+            //{
+            //    Console.WriteLine($"ERROR: Failed to reach service: {ex.Message}");
+            //    Logger.LogEvent($"ERROR: Failed to reach service: {ex.Message}");
+                
+            //    if (channel != null)
+            //        channel.Abort();
+                
+            //    return false;
+            //}
         }
 
         public double? GetBalance(string username)
@@ -136,37 +179,27 @@ namespace ATM
         {
             if (isAuthenticated)
             {
-                return _database.Deposit(username, amount);
+                try
+                {
+                    _database.Deposit(username, amount);
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    ColorfulConsole.WriteError($"Error depositing credis {ex.Message}");
+                }
             }
             return false;
-
-            // TODO: Send a request to SmartCardService
-            //Console.WriteLine($"{username} deposited {amount}. New balance: {accountBalances[username]}");
-            //Logger.LogEvent($"User {username} deposited {amount}. New balance: {accountBalances[username]}");
         }
 
         public bool Withdraw(string username, double amount)
         {
             if (isAuthenticated)
             {
-                return _database.Withdraw(username, amount);
+                _database.Withdraw(username, amount);
+                return true;
             }
             return false;
-
-            // TODO: Send a request to SmartCardService
-
-            //if (accountBalances.ContainsKey(username) && accountBalances[username] >= amount)
-            //{
-            //    accountBalances[username] -= amount;
-            //    Console.WriteLine($"{username} withdrew {amount}. Remaining balance: {accountBalances[username]}");
-            //    Logger.LogEvent($"User {username} withdrew {amount}. Remaining balance: {accountBalances[username]}");
-            //    return true;
-            //}
-            //else
-            //{
-            //    Logger.LogEvent($"ERROR: User {username} attempted to withdraw {amount} but had insufficient funds.");
-            //    throw new FaultException("Insufficient funds.");
-            //}
         }
 
         public string[] GetActiveUserAccounts()

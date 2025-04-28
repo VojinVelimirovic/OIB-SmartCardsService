@@ -44,6 +44,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CertManager.cs" />
+    <Compile Include="ColorfulConsole.cs" />
     <Compile Include="DigitalSignature.cs" />
     <Compile Include="IATMService.cs" />
     <Compile Include="ISmartCardsService.cs" />

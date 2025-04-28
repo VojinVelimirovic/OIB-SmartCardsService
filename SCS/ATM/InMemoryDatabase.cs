@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Collections.Generic;
 
 namespace ATM
@@ -17,11 +18,6 @@ namespace ATM
             InitializeSampleData();
         }
 
-        private bool UserExists(string username)
-        {
-            return _userCreditBalance.ContainsKey(username);
-        }
-
         public double? GetBalance(string username)
         {
             if (UserExists(username))
@@ -31,27 +27,41 @@ namespace ATM
             return null; // User not found
         }
 
-        public bool Deposit(string username, double amount)
+        public void Deposit(string username, double amount)
         {
-            if (UserExists(username))
-            {
-                _userCreditBalance[username] += amount;
-                return true; // Success
-            }
-            return false; // User not found
+            if (!UserExists(username))
+                _userCreditBalance.Add(username, 0);
+
+            _userCreditBalance[username] += amount;
+            Console.WriteLine($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]}");
+            Logger.LogEvent($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]}");
         }
 
-        public bool Withdraw(string username, double amount) // not sufficient to be a bool
+        public void Withdraw(string username, double amount)
         {
+            if (!UserExists(username))
+            {
+                _userCreditBalance.Add(username, 0);
+                Console.WriteLine($"User {username} failed to withdraw {amount}. Balance: 0");
+                Logger.LogEvent($"User {username} failed to withdraw {amount}. Balance: 0");
+                return;
+            }
+
             if (UserExists(username))
             {
                 if (_userCreditBalance[username] >= amount)
                 {
                     _userCreditBalance[username] -= amount;
-                    return true; // Success
+                    Console.WriteLine($"User {username} withdrew {amount}. New balance: {_userCreditBalance[username]}");
+                    Logger.LogEvent($"User {username} withdrew {amount}. New balance: {_userCreditBalance[username]}");
                 }
             }
-            return false; // User not found or insufficient funds
+        }
+        
+        // Check if user exists in AccountBalance database, it is assumed that Service has already authenticated their existance
+        private bool UserExists(string username)
+        {
+            return _userCreditBalance.ContainsKey(username);
         }
 
         private void InitializeSampleData()

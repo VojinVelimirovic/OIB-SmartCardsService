@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.ServiceModel;
+using System.Threading;
 using Common;
 
 namespace Client
@@ -66,7 +68,8 @@ namespace Client
             EndpointAddress primaryAddress,
             EndpointAddress backupAddress)
         {
-            string username = CertManager.ParseName(WindowsIdentity.GetCurrent().Name);
+            string username = null;
+
             while (true)
             {
                 Console.WriteLine("\n--- Client Menu ---");
@@ -93,7 +96,7 @@ namespace Client
                             Console.Write("Enter 4-digit PIN: ");
                             if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
                             {
-                                WriteError("Invalid PIN. Must be a 4-digit number.");
+                                ColorfulConsole.WriteError("Invalid PIN. Must be a 4-digit number.");
                                 break;
                             }
                             scsProxy.CreateSmartCard(newUser, pin);
@@ -106,66 +109,60 @@ namespace Client
                             Console.Write("Enter current PIN: ");
                             if (!int.TryParse(Console.ReadLine(), out int currentPin) || currentPin < 1000 || currentPin > 9999)
                             {
-                                WriteError("Invalid current PIN. Must be a 4-digit number.");
+                                ColorfulConsole.WriteError("Invalid current PIN. Must be a 4-digit number.");
                                 break;
                             }
                             Console.Write("Enter new 4-digit PIN: ");
                             if (!int.TryParse(Console.ReadLine(), out int newPin) || newPin < 1000 || newPin > 9999)
                             {
-                                WriteError("Invalid new PIN. Must be a 4-digit number.");
+                                ColorfulConsole.WriteError("Invalid new PIN. Must be a 4-digit number.");
                                 break;
                             }
-                            try
-                            {
-                                scsProxy.UpdatePin(changeUser, currentPin, newPin);
-                                Console.WriteLine("PIN updated successfully.");
-                            }
-                            catch (FaultException ex) // Catch general fault exceptions
-                            {
-                                WriteError(ex.Message); // This will show the service's error message
-                            }
+
+                            scsProxy.UpdatePin(changeUser, currentPin, newPin);
+                            Console.WriteLine("PIN updated successfully.");
                             break;
 
                         case "3": // Deposit
+                            if (!TwoFactorAuth(atmProxy, out username))
+                                break;
+
                             Console.Write("Enter amount to deposit: ");
                             if (!double.TryParse(Console.ReadLine(), out double depositAmount) || depositAmount <= 0)
                             {
-                                WriteError("Invalid deposit amount.");
+                                ColorfulConsole.WriteError("Invalid deposit amount.");
                                 break;
                             }
                             if (atmProxy.Deposit(username, depositAmount))
-                                Console.WriteLine($"Deposited {depositAmount:C} successfully.");
+                                ColorfulConsole.WriteAtmInfo($"Deposited {depositAmount:N2} RSD successfully.");
                             else
-                                WriteError("Deposit failed.");
+                                ColorfulConsole.WriteAtmInfo("Deposit failed.");
                             break;
 
                         case "4": // Withdraw
+                            if (!TwoFactorAuth(atmProxy, out username))
+                                break;
+
                             Console.Write("Enter amount to withdraw: ");
                             if (!double.TryParse(Console.ReadLine(), out double withdrawAmount) || withdrawAmount <= 0)
                             {
-                                WriteError("Invalid withdrawal amount.");
+                                ColorfulConsole.WriteError("Invalid withdrawal amount.");
                                 break;
                             }
+                            username = "marko";
                             if (atmProxy.Withdraw(username, withdrawAmount))
-                                Console.WriteLine($"Withdrew {withdrawAmount:C} successfully.");
+                                ColorfulConsole.WriteAtmInfo($"Withdrew {withdrawAmount:N2} RSD successfully.");
                             else
-                                WriteError("Withdrawal failed.");
+                                ColorfulConsole.WriteAtmInfo("Withdrawal failed.");
                             break;
 
                         case "5": // View Balance
-                            Console.WriteLine($"Current Balance: {atmProxy.GetBalance(username):C}");
+                            if (!TwoFactorAuth(atmProxy, out username))
+                                break;
+                            ColorfulConsole.WriteAtmInfo($"Current Balance: {atmProxy.GetBalance(username):N2} RSD.");
                             break;
 
                         case "6": // View Active Accounts
-                            //var accounts = scsProxy.GetActiveUserAccounts();
-                            //if (accounts == null || !accounts.Any())
-                            //    WriteError("No active user accounts found.");
-                            //else
-                            //{
-                            //    Console.WriteLine("Active User Accounts:");
-                            //    foreach (var acct in accounts)
-                            //        Console.WriteLine(acct);
-                            //}
                             break;
 
                         case "7": // Switch endpoint
@@ -177,29 +174,36 @@ namespace Client
                             return;
 
                         default:
-                            WriteError("Invalid option. Please try again.");
+                            ColorfulConsole.WriteError("Invalid option. Please try again.");
                             break;
                     }
                 }
-                catch (FaultException<SecurityException> secEx)
-                {
-                    WriteError($"Security error: {secEx.Detail.Message}");
-                }
-                catch (FaultException fault)
-                {
-                    WriteError($"Service fault: {fault.Message}");
-                }
-                catch (CommunicationException commEx)
-                {
-                    WriteError($"Communication error: {commEx.Message}");
-                }
                 catch (Exception ex)
                 {
-                    WriteError($"General error: {ex.Message}");
+                    ColorfulConsole.WriteError(ex.Message);
                 }
             }
         }
+        public static bool TwoFactorAuth(ClientProxyATM atmProxy, out string username)
+        {
+            username = null;
+            Console.Write("Enter username: ");
+            username = Console.ReadLine();
+            Console.Write("Enter 4-digit PIN: ");
+            if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
+            {
+                ColorfulConsole.WriteError("Invalid PIN. Must be a 4-digit number.");
+                return false;
+            }
 
+            if (!atmProxy.AuthenticateUser(username, pin))
+            {
+                ColorfulConsole.WriteError($"Authentication failed. Invalid credentials.");
+                return false;
+            }
+
+            return true;
+        }
         private static void SwitchEndpoint(ref EndpointAddress currentAddress, EndpointAddress primary, EndpointAddress backup)
         {
             currentAddress = currentAddress == primary ? backup : primary;
@@ -207,154 +211,6 @@ namespace Client
             Console.WriteLine($"[SmartCardsService] Switched to {(currentAddress == primary ? "primary" : "backup")} endpoint {currentAddress.Uri}");
             Console.ResetColor();
         }
-
-        private static void Menu(ClientProxyATM proxy, string username)
-        {
-            while (true)
-            {
-                Console.WriteLine("\n--- Client Menu ---");
-                Console.WriteLine("1. SmartCardsService/Create Smart Card");
-                Console.WriteLine("2. SmartCardsService/Change PIN");
-                Console.WriteLine("3. ATM/Deposit Funds");
-                Console.WriteLine("4. ATM/Withdraw Funds");
-                Console.WriteLine("5. ATM/View Balance");
-                Console.WriteLine("6. SmartCardsService/View Active User Accounts (Manager Only)");
-                Console.WriteLine("7. Exit");
-                Console.Write("Choose an option: ");
-
-                string choice = Console.ReadLine();
-
-                try
-                {
-                    switch (choice)
-                    {
-                        case "1":
-                            Console.Write("Enter username: ");
-                            string newUsername = Console.ReadLine();
-                            Console.Write("Enter 4-digit PIN: ");
-
-                            if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
-                            {
-                                WriteError("Invalid PIN. Must be a 4-digit number.");
-                                break;
-                            }
-
-                            // proxy.CreateSmartCard(newUsername, pin);
-                            Console.WriteLine("Smart card created successfully.");
-                            break;
-
-                        case "2":
-                            Console.Write("Enter username: ");
-                            string changeUsername = Console.ReadLine();
-                            Console.Write("Enter current PIN: ");
-
-                            if (!int.TryParse(Console.ReadLine(), out int currentPin) || currentPin < 1000 || currentPin > 9999)
-                            {
-                                WriteError("Invalid current PIN. Must be a 4-digit number.");
-                                break;
-                            }
-
-                            Console.Write("Enter new 4-digit PIN: ");
-                            if (!int.TryParse(Console.ReadLine(), out int newPin) || newPin < 1000 || newPin > 9999)
-                            {
-                                WriteError("Invalid new PIN. Must be a 4-digit number.");
-                                break;
-                            }
-
-                            // proxy.UpdatePin(changeUsername, currentPin, newPin);
-                            Console.WriteLine("PIN updated successfully.");
-                            break;
-
-                        case "3":
-                            Console.Write("Enter amount to deposit: ");
-
-                            if (!double.TryParse(Console.ReadLine(), out double depositAmount) || depositAmount <= 0)
-                            {
-                                WriteError("Invalid deposit amount.");
-                                break;
-                            }
-
-                            if (proxy.Deposit(username, depositAmount))
-                            {
-                                Console.WriteLine($"Deposited {depositAmount:C} successfully.");
-                            }
-                            else
-                            {
-                                WriteError("Deposit failed.");
-                            }
-                            break;
-
-                        case "4":
-                            Console.Write("Enter amount to withdraw: ");
-
-                            if (!double.TryParse(Console.ReadLine(), out double withdrawAmount) || withdrawAmount <= 0)
-                            {
-                                WriteError("Invalid withdrawal amount.");
-                                break;
-                            }
-
-                            if (proxy.Withdraw(username, withdrawAmount))
-                            {
-                                Console.WriteLine($"Withdrew {withdrawAmount:C} successfully.");
-                            }
-                            else
-                            {
-                                WriteError("Withdrawal failed.");
-                            }
-                            break;
-
-                        case "5":
-                            Console.WriteLine($"Current Balance: {proxy.GetBalance(username):C}");
-                            break;
-
-                        case "6":
-                            var activeAccounts = proxy.GetActiveUserAccounts();
-                            if (activeAccounts == null || !activeAccounts.Any())
-                            {
-                                WriteError("No active user accounts found.");
-                            }
-                            else
-                            {
-                                Console.ForegroundColor = ConsoleColor.Green;
-                                Console.WriteLine("Active User Accounts:");
-                                foreach (var account in activeAccounts)
-                                {
-                                    Console.WriteLine(account);
-                                }
-                                Console.ResetColor();
-                            }
-                            break;
-
-                        case "7":
-                            Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine("Exiting...");
-                            Console.ResetColor();
-                            return;
-
-                        default:
-                            WriteError("Invalid option. Please try again.");
-                            break;
-                    }
-                }
-                catch (FaultException<SecurityException> faultEx)
-                {
-                    WriteError($"Security error: {faultEx.Detail.Message}");
-                }
-                catch (FaultException fault)
-                {
-                    WriteError($"Fault error: {fault.Message}");
-                }
-                catch (CommunicationException commEx)
-                {
-                    WriteError($"Communication error: {commEx.Message}");
-                }
-                catch (Exception ex)
-                {
-                    WriteError($"General error: {ex.Message}");
-                }
-            }
-        }
-
         static void TestSignedMessage(NetTcpBinding binding, EndpointAddress intermediaryAddress)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
@@ -388,8 +244,8 @@ namespace Client
                 Console.WriteLine($"[ATM - SIGNED] Failed: {ex.Message}");
             }
         }
-
-        static void TestServiceConnection(NetTcpBinding binding, ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress)
+        static void TestServiceConnection(NetTcpBinding binding, 
+            ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
             Console.WriteLine("\n[SmartCardsService] Attempting connection...");
@@ -410,12 +266,6 @@ namespace Client
                 Console.WriteLine($"[SmartCardsService] Failed at {currentAddress.Uri}: {ex.Message}");
                 SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
             }
-        }
-        private static void WriteError(string message)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"ERROR: {message}");
-            Console.ResetColor();
         }
         public static void TestConnection(NetTcpBinding serviceBinding, NetTcpBinding atmBinding, 
             ref EndpointAddress currentAddress, EndpointAddress primaryAddress, EndpointAddress backupAddress, EndpointAddress atmAddress)
@@ -444,6 +294,7 @@ namespace Client
                 }
             }
         }
+
 
     }
 }

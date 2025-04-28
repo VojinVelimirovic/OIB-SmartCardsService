@@ -112,5 +112,14 @@ namespace Common
             }
             return false; // Cert not found or no access
         }
+
+        public static string ExtractOrganizationalUnit(string subject)
+        {
+            var parts = subject.Split(',')
+                               .Select(p => p.Trim())
+                               .Where(p => p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
+                               .ToList();
+            return parts.Count > 0 ? parts[0].Substring(3) : null;
+        }
     }
 }

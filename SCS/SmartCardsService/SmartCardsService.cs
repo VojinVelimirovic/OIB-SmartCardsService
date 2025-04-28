@@ -26,8 +26,6 @@ namespace SmartCardsService
 
             if (!Directory.Exists(folderPath))
                 Directory.CreateDirectory(folderPath);
-            //string solutionDir = GetSolutionDirectory();
-            //folderPath = Path.Combine(solutionDir, "SmartCards");
         }
 
         private string GetSolutionDirectory()
@@ -119,6 +117,7 @@ namespace SmartCardsService
             SmartCard card = JsonSerializer.Deserialize<SmartCard>(json);
 
             string hashedPin = HashPin(pin);
+            Console.WriteLine($"Received validation request for {username}.");
             return card?.PIN == hashedPin;
         }
 
@@ -165,46 +164,6 @@ namespace SmartCardsService
             }
         }
 
-        public bool Deposit(string username, int pin, double sum)
-        {
-            if (!IsUserInValidGroup())
-            {
-                string name = Thread.CurrentPrincipal.Identity.Name;
-                DateTime time = DateTime.Now;
-                string exceptionMessage = String.Format("Access is denied.\n User {0} tried to call AddBalance method (time: {1}).\n " +
-                    "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
-                throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
-            }
-            if (!ValidateSmartCard(username, pin))
-            {
-                throw new FaultException<SecurityException>(new SecurityException("Access is denied.\nInvalid username/pin.\n"));
-            }
-            // ATM atm = ATM.Create(username);
-            Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
-            return true;
-          //  return atm.AddBalance(sum);
-        }
-
-        public bool Withdraw(string username, int pin, double sum)
-        {
-            if (!IsUserInValidGroup())
-            {
-                string name = Thread.CurrentPrincipal.Identity.Name;
-                DateTime time = DateTime.Now;
-                string exceptionMessage = String.Format("Access is denied.\n User {0} tried to call RemoveBalance method (time: {1}).\n " +
-                    "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
-                throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
-            }
-            if (!ValidateSmartCard(username, pin))
-            {
-                throw new FaultException<SecurityException>(new SecurityException("Access is denied.\nInvalid username/pin.\n"));
-            }
-            // ATM atm = ATM.Create(username);
-            Logger.LogEvent($"User '{username}' added {sum} to his ATM balance.");
-            return true;
-            // return atm.RemoveBalance(sum);
-        }
-
         public string[] GetActiveUserAccounts()
         {
             if (!Thread.CurrentPrincipal.IsInRole("SmartCardUser"))
@@ -231,19 +190,10 @@ namespace SmartCardsService
 
             // 2) Get the X509Certificate2 and extract its OU
             var clientCert = certClaimSet.X509Certificate;
-            string ou = ExtractOrganizationalUnit(clientCert.Subject);
+            string ou = CertManager.ExtractOrganizationalUnit(clientCert.Subject);
 
             // 3) Only allow if OU is exactly one of these
             return ou == "SmartCardUser" || ou == "Manager";
-        }
-
-        private static string ExtractOrganizationalUnit(string subject)
-        {
-            var parts = subject.Split(',')
-                               .Select(p => p.Trim())
-                               .Where(p => p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase))
-                               .ToList();
-            return parts.Count > 0 ? parts[0].Substring(3) : null;
         }
 
         public void ReplicateSmartCard(SmartCard card)
