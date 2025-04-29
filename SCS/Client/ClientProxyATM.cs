@@ -65,7 +65,9 @@ namespace Client
         }
         public string[] GetActiveUserAccounts()
         {
-            return factory.GetActiveUserAccounts();
+            var cert = this.Credentials.ClientCertificate.Certificate;
+            byte[] certBytes = cert.Export(X509ContentType.Cert);
+            return factory.GetActiveUserAccounts(certBytes);
         }
         protected override void OnClosed()
         {
@@ -85,6 +87,11 @@ namespace Client
                 ((IClientChannel)factory).Close();
             }
             this.Close();
+        }
+
+        public string[] GetActiveUserAccounts(byte[] clientCert)
+        {
+            throw new NotImplementedException();
         }
     }
 }

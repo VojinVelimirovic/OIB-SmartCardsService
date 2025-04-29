@@ -78,7 +78,7 @@ namespace Client
                 Console.WriteLine("3. ATM/Deposit Funds");
                 Console.WriteLine("4. ATM/Withdraw Funds");
                 Console.WriteLine("5. ATM/View Balance");
-                Console.WriteLine("6. SmartCardsService/View Active User Accounts (Manager Only)");
+                Console.WriteLine("6. ATM/View Active User Accounts (Manager Only)");
                 Console.WriteLine("7. Switch SmartCardsService Endpoint Manually");
                 Console.WriteLine("8. Exit");
                 Console.Write("Choose an option: ");
@@ -163,6 +163,19 @@ namespace Client
                             break;
 
                         case "6": // View Active Accounts
+                            string[] accounts = atmProxy.GetActiveUserAccounts();
+                            string print = "";
+                            if(accounts.Length == 0)
+                            {
+                                ColorfulConsole.WriteAtmInfo("There are no active accounts.");
+                                break;
+                            }
+                            print += "Active accounts:";
+                            foreach (string s in accounts)
+                            {
+                                print += '\n' + s;
+                            }
+                            ColorfulConsole.WriteAtmInfo(print);
                             break;
 
                         case "7": // Switch endpoint

@@ -14,6 +14,7 @@ using System.Net;
 
 namespace ATM
 {
+    [ServiceBehavior(IncludeExceptionDetailInFaults = true)]
     public class ATMService : IATMService
     {
         private readonly InMemoryDatabase _database;
@@ -202,20 +203,112 @@ namespace ATM
             return false;
         }
 
-        public string[] GetActiveUserAccounts()
+        public string[] GetActiveUserAccounts(byte[] clientCert)
         {
-            WindowsIdentity identity = WindowsIdentity.GetCurrent();
-            WindowsPrincipal principal = new WindowsPrincipal(identity);
-            if (!principal.IsInRole("Manager"))
+            try
             {
-                Logger.LogEvent("ACCESS DENIED: Unauthorized attempt to access all accounts.");
-                throw new FaultException("Access Denied: Only Managers can access this information.");
+                if (clientCert == null || clientCert.Length == 0)
+                    throw new FaultException<SecurityException>(new SecurityException("Client certificate not provided."),new FaultReason("Client certificate not provided."));
+
+                X509Certificate2 cert;
+                try
+                {
+                    cert = new X509Certificate2(clientCert);
+                }
+                catch (Exception)
+                {
+                    throw new FaultException<SecurityException>(new SecurityException("Invalid certificate format."), new FaultReason("Invalid certificate format."));
+                }
+
+                var subject = cert.Subject; // e.g., "CN=client, OU=Manager, O=Org, C=US"
+                var ouPart = subject.Split(',')
+                                    .Select(s => s.Trim())
+                                    .FirstOrDefault(p => p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase));
+
+                if (ouPart == null || !ouPart.Equals("OU=Manager", StringComparison.OrdinalIgnoreCase))
+                    throw new FaultException<SecurityException>(new SecurityException("You must be a certified Manager to access this method."), new FaultReason("You must be a certified Manager to access this method."));
+
+                string[] result = null;
+                bool success = false;
+
+                try
+                {
+                    result = CallGetActiveUserAccounts(_usePrimary ? _primaryAddress : _backupAddress, out success);
+
+                    if (!success)
+                    {
+                        _usePrimary = !_usePrimary;
+                        Console.WriteLine($"Switched to {(_usePrimary ? "primary" : "backup")} endpoint");
+
+                        result = CallGetActiveUserAccounts(_usePrimary ? _primaryAddress : _backupAddress, out success);
+                    }
+
+                    if (!success)
+                        throw new EndpointNotFoundException("Both service endpoints are unavailable.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error during CallGetActiveUserAccounts: {ex.Message}");
+                    throw new FaultException<SecurityException>(new SecurityException("Failed to get user accounts: " + ex.Message), new FaultReason("Failed to get user accounts: " + ex.Message));
+                }
+
+                return result;
             }
-            return new string[] { };
-            // TODO: Send a request to SmartCardService
-            
-            //return accountBalances.Keys.ToArray();
+            catch (FaultException<SecurityException>)
+            {
+                throw; // allow explicitly thrown security faults through
+            }
+            catch (Exception ex)
+            {
+                // Catch-all to ensure you never return an untyped Fault
+                throw new FaultException<SecurityException>(new SecurityException("Internal server error: " + ex.Message));
+            }
         }
+
+
+        private string[] CallGetActiveUserAccounts(EndpointAddress address, out bool success)
+        {
+            success = false;
+            ChannelFactory<ISmartCardsService> factory = null;
+            IClientChannel client = null;
+
+            try
+            {
+                factory = new ChannelFactory<ISmartCardsService>(_binding, address);
+
+                factory.Credentials.ClientCertificate.Certificate =
+                    CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "oib_atm");
+
+                factory.Credentials.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+                factory.Credentials.ServiceCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+                factory.Credentials.ServiceCertificate.Authentication.TrustedStoreLocation = StoreLocation.LocalMachine;
+
+                var channel = factory.CreateChannel();
+                client = (IClientChannel)channel;
+
+                client.Open();
+
+                var users = channel.GetActiveUserAccounts();
+
+                client.Close();
+                success = true;
+                return users;
+            }
+            catch (Exception ex)
+            {
+                client?.Abort();
+                Console.WriteLine($"Failed to get active user accounts from {address.Uri}: {ex.Message}");
+                return Array.Empty<string>();
+            }
+            finally
+            {
+                if (factory?.State != CommunicationState.Faulted)
+                    factory?.Close();
+                else
+                    factory?.Abort();
+            }
+        }
+
 
         public void SignedMessage(SignedRequest request)
         {

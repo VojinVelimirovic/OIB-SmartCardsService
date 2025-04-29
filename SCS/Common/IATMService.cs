@@ -30,7 +30,7 @@ namespace Common
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        string[] GetActiveUserAccounts(); // Only for Managers
+        string[] GetActiveUserAccounts(byte[] clientCert); // Only for Managers
 
     }
 }

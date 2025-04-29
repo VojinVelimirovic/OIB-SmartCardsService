@@ -57,5 +57,10 @@ namespace Client
         {
             throw new NotImplementedException();
         }
+
+        public string[] GetActiveUserAccounts()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

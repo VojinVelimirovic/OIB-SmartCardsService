@@ -166,13 +166,33 @@ namespace SmartCardsService
 
         public string[] GetActiveUserAccounts()
         {
-            if (!Thread.CurrentPrincipal.IsInRole("SmartCardUser"))
+            try
             {
-                throw new FaultException<SecurityException>(new SecurityException("Access is denied. For this method user needs to be member of the group Manager.\n"));
+                string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SmartCards");
+
+                if (!Directory.Exists(folderPath))
+                {
+                    Logger.LogEvent("SmartCards folder not found.");
+                    return Array.Empty<string>();
+                }
+
+                string[] jsonFiles = Directory.GetFiles(folderPath, "*.json");
+
+                string[] usernames = jsonFiles
+                    .Select(file => Path.GetFileNameWithoutExtension(file))
+                    .ToArray();
+
+                Logger.LogEvent($"GetActiveUserAccounts called. Found {usernames.Length} users.");
+
+                return usernames;
             }
-            return new string[] { };
-            //return ATM.UsersAccountBalance.Keys.ToList();
+            catch (Exception ex)
+            {
+                Logger.LogEvent($"Error in GetActiveUserAccounts: {ex.Message}");
+                return Array.Empty<string>();
+            }
         }
+
 
         //////////////////////////////////
         private static bool IsUserInValidGroup()

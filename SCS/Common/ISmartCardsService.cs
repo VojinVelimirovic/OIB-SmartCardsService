@@ -26,6 +26,8 @@ namespace Common
         void UpdatePin(string username, int oldPin, int newPin);
         [OperationContract(IsOneWay = true)]
         void ReplicateSmartCard(SmartCard card);
+        [OperationContract]
+        string[] GetActiveUserAccounts();
 
     }
 }
