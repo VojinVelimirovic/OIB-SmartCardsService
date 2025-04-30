@@ -238,6 +238,7 @@ namespace Client
                 Console.Write("Choose an option: ");
 
                 var choice = Console.ReadLine();
+                bool switchBlockActivated = false;
 
                 try
                 {
@@ -264,6 +265,7 @@ namespace Client
                                 {
                                     ColorfulConsole.WriteError($"- [SmartCardsService] Failed at {currentAddress.Uri}: {ex.Message}");
                                     SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
+                                    switchBlockActivated = true;
                                     break;
                                 }
                             }
@@ -371,7 +373,8 @@ namespace Client
                 }
                 catch (Exception ex)
                 {
-                    ColorfulConsole.WriteError(ex.Message);
+                    if (!switchBlockActivated)
+                        ColorfulConsole.WriteError(ex.Message);
                 }
             }
         }
