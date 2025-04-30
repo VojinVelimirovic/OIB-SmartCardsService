@@ -16,7 +16,6 @@ namespace SmartCardsService
     public class SmartCardsService : ISmartCardsService
     {
         private readonly string folderPath;
-        private readonly string backupServerAddress = "net.tcp://localhost:9998/SmartCardsService";
         public SmartCardsService()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -28,18 +27,11 @@ namespace SmartCardsService
                 Directory.CreateDirectory(folderPath);
         }
 
-        private string GetSolutionDirectory()
-        {
-            var currentDirectory = Directory.GetCurrentDirectory();
-            var solutionDir = new DirectoryInfo(currentDirectory).Parent.Parent.Parent;
-            return solutionDir.FullName;
-        }
-
-        public void TestCommunication()
+        public void TestCommunication() // testing
         {
             Console.WriteLine("Communication established.");
         }
-        public void SignedMessage(SignedRequest request)
+        public void SignedMessage(SignedRequest request) // testing
         {
             Console.WriteLine("ATM message received");
         }
@@ -75,7 +67,7 @@ namespace SmartCardsService
             string filePath = Path.Combine(folderPath, $"{username}.json");
             string json = JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filePath, json);
-            //ATM.Create(username);
+            ColorfulConsole.WriteSuccess($"SmartCard for user '{username}' created successfully.");
             Logger.LogEvent($"SmartCard for user '{username}' created successfully.");
             ReplicateToBackupServer(card);
         }
@@ -105,6 +97,7 @@ namespace SmartCardsService
             card.PIN = HashPin(newPin);
             File.WriteAllText(filePath, JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true }));
 
+            ColorfulConsole.WriteSuccess($"PIN changed for user '{username}'.");
             Logger.LogEvent($"PIN changed for user '{username}'.");
             ReplicateToBackupServer(card);
         }
@@ -136,11 +129,21 @@ namespace SmartCardsService
 
             try
             {
-                // Use the unsecured replication endpoint
-                string replicationAddress = "net.tcp://localhost:9000/SmartCardsReplication";
+                string localUri = OperationContext.Current.IncomingMessageHeaders.To?.ToString() ?? "";
+
+                // Prevent infinite replication loop: if this came in on port 9000, it's a backup, don't send again
+                if (localUri.Contains(":9000/SmartCardsReplication"))
+                    return;
+
+                // If this arrived on 9001 (we're in main), send to backup on 9000
+                // Otherwise (shouldn't happen), default to main on 9001
+                string replicationAddress = localUri.Contains(":9001/SmartCardsReplication")
+                    ? "net.tcp://localhost:9000/SmartCardsReplication"  // Main -> Backup
+                    : "net.tcp://localhost:9001/SmartCardsReplication"; // Shouldn't normally happen
 
                 NetTcpBinding binding = new NetTcpBinding();
-                binding.Security.Mode = SecurityMode.None; // No security for replication
+                binding.Security.Mode = SecurityMode.None;
+                binding.SendTimeout = TimeSpan.FromSeconds(5); // Fail fast if backup is down
 
                 EndpointAddress address = new EndpointAddress(replicationAddress);
 
@@ -148,19 +151,29 @@ namespace SmartCardsService
                 proxy = factory.CreateChannel();
                 channel = (IClientChannel)proxy;
 
+                // Explicitly open channel to detect connection issues
+                channel.Open();
+
                 proxy.ReplicateSmartCard(card);
-                Console.WriteLine("Data successfully replicated");
-                Logger.LogEvent("Data sucessfully replicated");
+
+                // Verify channel state
+                if (channel.State == CommunicationState.Faulted)
+                {
+                    throw new CommunicationException("Replication failed - channel faulted");
+                }
+
+                Console.WriteLine("Data successfully replicated to backup");
+                Logger.LogEvent("Data successfully replicated to backup");
                 channel.Close();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR: Replication failed: {ex.Message}");
-                Logger.LogEvent($"ERROR: Replication failed: {ex.Message}");
-                if (channel != null)
-                {
-                    channel.Abort();
-                }
+                Console.WriteLine($"ERROR: Replication to backup failed: {ex.Message}");
+                Logger.LogEvent($"ERROR: Replication to backup failed: {ex.Message}");
+                channel?.Abort();
+
+                // Consider throwing if caller needs to know replication failed
+                // throw; 
             }
         }
 
