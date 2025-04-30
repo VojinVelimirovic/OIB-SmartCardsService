@@ -27,7 +27,6 @@ namespace Common
 
         public static void LogEvent(string message)
         {
-            // TODO: Expand method for different EventLogEntryType levels?
             EventLog.WriteEntry(Source, message, EventLogEntryType.Information);
         }
 

@@ -90,7 +90,6 @@ namespace Client
                     switch (choice)
                     {
                         case "1": // Create Smart Card
-                            // TODO: get username based on current user username?
                             Console.Write("Enter username: ");
                             var newUser = Console.ReadLine();
                             Console.Write("Enter 4-digit PIN: ");
@@ -149,11 +148,10 @@ namespace Client
                                 ColorfulConsole.WriteError("Invalid withdrawal amount.");
                                 break;
                             }
-                            username = "marko";
-                            if (atmProxy.Withdraw(username, withdrawAmount))
-                                ColorfulConsole.WriteAtmInfo($"Withdrew {withdrawAmount:N2} RSD successfully.");
+                            if (atmProxy.Withdraw(username, withdrawAmount, out string message))
+                                ColorfulConsole.WriteAtmInfo(message);
                             else
-                                ColorfulConsole.WriteAtmInfo("Withdrawal failed.");
+                                ColorfulConsole.WriteError(message);
                             break;
 
                         case "5": // View Balance

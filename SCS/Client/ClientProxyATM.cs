@@ -59,9 +59,10 @@ namespace Client
         {
             return factory.Deposit(username, amount);
         }
-        public bool Withdraw(string username, double amount)
+        public bool Withdraw(string username, double amount, out string message)
         {
-            return factory.Withdraw(username, amount);
+            message = string.Empty;
+            return factory.Withdraw(username, amount, out message);
         }
         public string[] GetActiveUserAccounts()
         {

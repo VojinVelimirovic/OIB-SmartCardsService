@@ -8,10 +8,10 @@ namespace Common
     {
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        void TestCommunication();
+        void TestCommunication(); // for testing purposes
 
         [OperationContract]
-        void SignedMessage(SignedRequest request);
+        void SignedMessage(SignedRequest request); // for testing purposes
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
@@ -23,7 +23,7 @@ namespace Common
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        bool Withdraw(string username, double amount);
+        bool Withdraw(string username, double amount, out string message);
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         double? GetBalance(string username);

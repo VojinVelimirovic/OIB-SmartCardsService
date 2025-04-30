@@ -1,16 +1,11 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.ServiceModel;
-using System.Security.Principal;
 using Common;
-using System.Diagnostics;
 using System.Security.Cryptography.X509Certificates;
-using System.ServiceModel.Channels;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.ServiceModel.Security;
-using System.Net;
 
 namespace ATM
 {
@@ -31,7 +26,7 @@ namespace ATM
             _binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
             _binding.Security.Transport.ProtectionLevel = ProtectionLevel.EncryptAndSign;
 
-            // Set SSL/TLS protocol (use modern protocols)
+            // Set SSL/TLS protocol for communication with service
             _binding.Security.Transport.SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls11;
 
             var serviceCert = CertManager.GetCertificateFromStorage(StoreName.TrustedPeople, StoreLocation.LocalMachine, "wcfservice");
@@ -70,105 +65,75 @@ namespace ATM
             }
         }
 
-        //private void ConnectToSmartCardService()
-        //{
-        //    NetTcpBinding binding = new NetTcpBinding
-        //    {
-        //        Security =
-        //        {
-        //            Mode = SecurityMode.Transport,
-        //            Transport =
-        //            {
-        //                ClientCredentialType = TcpClientCredentialType.Windows,
-        //                ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign
-        //            }
-        //        }
-        //    };
-
-        //    try
-        //    {
-        //        Console.WriteLine("Connecting to primary SmartCardsService...");
-        //        smartCardService = CreateChannel(binding, primaryAddress);
-        //        Console.WriteLine("ATM connected successfully.");
-        //        smartCardService.TestCommunication();
-        //    }
-        //    catch (Exception)
-        //    {
-        //        Console.WriteLine("Primary SmartCardsService failed. Attempting backup...");
-        //        try
-        //        {
-        //            smartCardService = CreateChannel(binding, backupAddress);
-        //            smartCardService.TestCommunication();
-        //            Console.WriteLine("Connected to backup SmartCardsService.");
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine("Failed to connect to both primary and backup SmartCardsService: \n" + ex.Message);
-        //        }
-        //    }
-        //}
-
         public bool AuthenticateUser(string username, int pin)
         {
-            try
+            Console.WriteLine($"Authenticating user '{username}' with SmartCardsService...");
+
+            bool success = TryAuthenticate(_usePrimary ? _primaryAddress : _backupAddress, username, pin);
+
+            if (!success)
             {
-                Console.WriteLine($"Authenticating user '{username}' with SmartCardsService...");
-
-                // TODO: Make it work with backup
-                using (var factory = new ChannelFactory<ISmartCardsService>(_binding, _primaryAddress))
-                {
-
-                    factory.Credentials.ClientCertificate.Certificate =
-                        CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "oib_atm");
-
-                    factory.Credentials.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
-                    factory.Credentials.ServiceCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
-                    factory.Credentials.ServiceCertificate.Authentication.TrustedStoreLocation = StoreLocation.LocalMachine;
-
-                    var channel = factory.CreateChannel();
-                    bool response = channel.ValidateSmartCard(username, pin);
-                    ((IClientChannel)channel).Close();
-
-                    if (response)
-                        ColorfulConsole.WriteSuccess($"User '{username}' successfully authenticated.");
-                    else
-                        ColorfulConsole.WriteError($"Authentication failed for user '{username}'. Invalid credentials.");
-                    
-                    isAuthenticated = response;
-                    return response;
-                }
+                _usePrimary = !_usePrimary;
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"Switched to {(_usePrimary ? "primary" : "backup")} endpoint");
+                Console.ResetColor();
+                success = TryAuthenticate(_usePrimary ? _primaryAddress : _backupAddress, username, pin);
             }
-            catch (Exception ex)
+
+            if (!success)
             {
-                Console.WriteLine($"Failed to forward to {_primaryAddress.Uri}: {ex}");
+                ColorfulConsole.WriteError($"Authentication failed for user '{username}'. Both service endpoints are unavailable.");
                 return false;
             }
 
-            //ISmartCardsService proxy = null;
-            //IClientChannel channel = null;
+            return isAuthenticated;
+        }
 
-            //try
-            //{
-            //    var factory = new ChannelFactory<ISmartCardsService>(_binding, _primaryAddress);
+        private bool TryAuthenticate(EndpointAddress address, string username, int pin)
+        {
+            ChannelFactory<ISmartCardsService> factory = null;
+            IClientChannel channel = null;
 
-            //    proxy = factory.CreateChannel();
-            //    channel = (IClientChannel)proxy;
-            //    bool response = proxy.ValidateSmartCard(username, pin);
-            //    channel.Close();
-            //    factory.Close();
+            try
+            {
+                factory = new ChannelFactory<ISmartCardsService>(_binding, address);
 
-            //    return response;
-            //}
-            //catch (Exception ex)
-            //{
-            //    Console.WriteLine($"ERROR: Failed to reach service: {ex.Message}");
-            //    Logger.LogEvent($"ERROR: Failed to reach service: {ex.Message}");
-                
-            //    if (channel != null)
-            //        channel.Abort();
-                
-            //    return false;
-            //}
+                factory.Credentials.ClientCertificate.Certificate =
+                    CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "oib_atm");
+
+                factory.Credentials.ServiceCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+                factory.Credentials.ServiceCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+                factory.Credentials.ServiceCertificate.Authentication.TrustedStoreLocation = StoreLocation.LocalMachine;
+
+                channel = (IClientChannel)factory.CreateChannel();
+                channel.Open();
+
+                bool response = ((ISmartCardsService)channel).ValidateSmartCard(username, pin);
+                channel.Close();
+
+                if (response)
+                    ColorfulConsole.WriteSuccess($"User '{username}' successfully authenticated.");
+                else
+                    ColorfulConsole.WriteError($"Authentication failed for user '{username}'. Invalid credentials.");
+
+                isAuthenticated = response;
+                return true; // Return true for successful communication (regardless of auth result)
+            }
+            catch (EndpointNotFoundException ex)
+            {
+                Console.WriteLine($"Failed to forward to {address.Uri}: {ex.Message}");
+                return false; // Return false for communication failure
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to forward to {address.Uri}: {ex.Message}");
+                return false; // Return false for communication failure
+            }
+            finally
+            {
+                SafeClose(channel);
+                SafeClose(factory);
+            }
         }
 
         public double? GetBalance(string username)
@@ -187,20 +152,32 @@ namespace ATM
                 }
                 catch (Exception ex)
                 {
-                    ColorfulConsole.WriteError($"Error depositing credis {ex.Message}");
+                    ColorfulConsole.WriteError($"Error depositing credits: {ex.Message}");
                 }
             }
             return false;
         }
 
-        public bool Withdraw(string username, double amount)
+        public bool Withdraw(string username, double amount, out string message)
         {
-            if (isAuthenticated)
+            if (!isAuthenticated)
+            {
+                message = "User not authenticated";
+                return false;
+            }
+
+            try
             {
                 _database.Withdraw(username, amount);
+                message = $"Successfully withdrew {amount:N2} RSD";
                 return true;
             }
-            return false;
+            catch (Exception ex)
+            {
+                ColorfulConsole.WriteError($"Error withdrawing credits: {ex.Message}");
+                message = ex.Message;
+                return false;
+            }
         }
 
         public string[] GetActiveUserAccounts(byte[] clientCert)
@@ -265,7 +242,6 @@ namespace ATM
             }
         }
 
-
         private string[] CallGetActiveUserAccounts(EndpointAddress address, out bool success)
         {
             success = false;
@@ -309,7 +285,7 @@ namespace ATM
             }
         }
 
-
+        // For testing purposes
         public void SignedMessage(SignedRequest request)
         {
             Console.WriteLine($"Received signed message from {request.SenderName}");
@@ -403,6 +379,7 @@ namespace ATM
             }
         }
 
+        // For testing purposes
         private bool TryForwardRequest(EndpointAddress address)
         {
             try
@@ -431,22 +408,20 @@ namespace ATM
                 return false;
             }
         }
-
-        //public static void PrintBalances()
-        //{
-        //      Request needs to be forwarded to SmartCardService
-        //    Console.WriteLine("\n--- User Account Balances ---");
-        //    Console.WriteLine("{0,-20} {1,10}", "Username", "Balance");
-        //    // Print a separator line
-        //    Console.WriteLine(new string('-', 30));
-        //    // Loop through the dictionary and print each username and balance
-        //    foreach (var account in UsersAccountBalance)
-        //    {
-        //        Console.WriteLine("{0,-20} {1,10:C}", account.Key, account.Value);
-        //    }
-        //    // Print a separator line
-        //    Console.WriteLine(new string('-', 30));
-        //}
-
+        static void SafeClose(ICommunicationObject comObj)
+        {
+            if (comObj == null) return;
+            try
+            {
+                if (comObj.State != CommunicationState.Faulted)
+                    comObj.Close();
+                else
+                    comObj.Abort();
+            }
+            catch
+            {
+                comObj.Abort();
+            }
+        }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Common;
 using System;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 
 namespace ATM
 {
@@ -33,8 +34,8 @@ namespace ATM
                 _userCreditBalance.Add(username, 0);
 
             _userCreditBalance[username] += amount;
-            Console.WriteLine($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]}");
-            Logger.LogEvent($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]}");
+            Console.WriteLine($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]:N2} RSD.");
+            Logger.LogEvent($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]:N2} RSD.");
         }
 
         public void Withdraw(string username, double amount)
@@ -42,9 +43,9 @@ namespace ATM
             if (!UserExists(username))
             {
                 _userCreditBalance.Add(username, 0);
-                Console.WriteLine($"User {username} failed to withdraw {amount}. Balance: 0");
-                Logger.LogEvent($"User {username} failed to withdraw {amount}. Balance: 0");
-                return;
+                Console.WriteLine($"User {username} failed to withdraw {amount:N2} RSD. Balance: 0.0 RSD.");
+                Logger.LogEvent($"User {username} failed to withdraw {amount::N2} RSD. Balance: 0.0 RSD.");
+                throw new Exception("Insufficient balance. Balance: 0.0 RSD.");
             }
 
             if (UserExists(username))
@@ -52,9 +53,10 @@ namespace ATM
                 if (_userCreditBalance[username] >= amount)
                 {
                     _userCreditBalance[username] -= amount;
-                    Console.WriteLine($"User {username} withdrew {amount}. New balance: {_userCreditBalance[username]}");
-                    Logger.LogEvent($"User {username} withdrew {amount}. New balance: {_userCreditBalance[username]}");
+                    Console.WriteLine($"User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
+                    Logger.LogEvent($"User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
                 }
+                throw new Exception($"Insufficient balance. Balance: {_userCreditBalance[username]:N2} RSD.");
             }
         }
         
@@ -66,7 +68,7 @@ namespace ATM
 
         private void InitializeSampleData()
         {
-            _userCreditBalance.Add("Marko", 500);
+            _userCreditBalance.Add("test", 500);
         }
     }
 }
