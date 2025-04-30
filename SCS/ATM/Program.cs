@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Security.Cryptography.X509Certificates;
 using System.ServiceModel;
+using System.ServiceModel.Security;
 using Common;
 
 namespace ATM
@@ -8,31 +10,29 @@ namespace ATM
     {
         static void Main(string[] args)
         {
-            NetTcpBinding binding = new NetTcpBinding();
-            binding.Security.Mode = SecurityMode.Transport;
-            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
-            binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
+            var certBinding = new NetTcpBinding(SecurityMode.Transport);
+            certBinding.Security.Transport.ClientCredentialType = TcpClientCredentialType.None;
 
-            string address = "net.tcp://localhost:8888/ATMService";
-            ServiceHost host = new ServiceHost(typeof(ATMService));
-            host.AddServiceEndpoint(typeof(IATMService), binding, address);
+            var host = new ServiceHost(typeof(ATMService), new Uri("net.tcp://localhost:10000/ATMService"));
+            host.AddServiceEndpoint(typeof(IATMService), certBinding, "");
 
-            try
+            host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+            host.Credentials.ClientCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+            host.Credentials.ServiceCertificate.Certificate = CertManager.GetCertificateFromStorage(
+                StoreName.My, StoreLocation.LocalMachine, "oib_atm");
+
+            if (!CertManager.CurrentUserHasCertificate("oib_atm"))
             {
-                host.Open();
-                Console.WriteLine("ATMService is running...");
-                Console.WriteLine("Press Enter to stop the service.");
+                Console.WriteLine("Current user does not have the required certificate. Exiting...");
                 Console.ReadLine();
+                return;
             }
-            catch (Exception e)
-            {
-                Console.WriteLine("Error: " + e.Message);
-            }
-            finally
-            {
-                if (host.State == CommunicationState.Opened)
-                    host.Close();
-            }
+
+            host.Open();
+            Console.WriteLine("ATM service running. Press Enter to stop.");
+            Console.ReadLine();
+
+            host.Close();
         }
     }
 }

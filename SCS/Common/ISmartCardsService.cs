@@ -13,6 +13,8 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         void TestCommunication();
+        [OperationContract]
+        void SignedMessage(SignedRequest request);
 
         [OperationContract]
         void CreateSmartCard(string username, int pin);
@@ -22,6 +24,10 @@ namespace Common
 
         [OperationContract]
         void UpdatePin(string username, int oldPin, int newPin);
+        [OperationContract(IsOneWay = true)]
+        void ReplicateSmartCard(SmartCard card);
+        [OperationContract]
+        string[] GetActiveUserAccounts();
 
     }
 }

@@ -1,8 +1,8 @@
 ﻿using Common;
 using System;
 using System.Security.Cryptography.X509Certificates;
-using System.Security.Principal;
 using System.ServiceModel;
+using System.ServiceModel.Description;
 using System.ServiceModel.Security;
 
 namespace SmartCardsService
@@ -12,38 +12,35 @@ namespace SmartCardsService
         static void Main(string[] args)
         {
             NetTcpBinding binding = new NetTcpBinding();
+            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
+
+            var replicationBinding = new NetTcpBinding();
+            replicationBinding.Security.Mode = SecurityMode.Transport;
+
             string address = "net.tcp://localhost:9999/SmartCardsService";
-
-            //jednostavna windows autentifikacija za sada
-            binding.Security.Mode = SecurityMode.Transport;
-            binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
-            //binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
-            binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
-
+            string replicationAddress = "net.tcp://localhost:9001/SmartCardsReplication";
 
             ServiceHost host = new ServiceHost(typeof(SmartCardsService));
-            //host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.PeerOrChainTrust;
-            //host.Credentials.ClientCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
-
-            // Set the service's certificate (used for encryption)
-            //host.Credentials.ServiceCertificate.SetCertificate(
-            //    StoreLocation.LocalMachine,
-            //    StoreName.My,
-            //    X509FindType.FindBySubjectName,
-            //    "YourServerCertificateName" // Replace with actual server certificate name
-            //);
-
             host.AddServiceEndpoint(typeof(ISmartCardsService), binding, address);
+            host.AddServiceEndpoint(typeof(ISmartCardsService), replicationBinding, replicationAddress);
 
-            host.Open();
-            Console.WriteLine("Main server is running at: " + address);
+            host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;
+            host.Credentials.ClientCertificate.Authentication.RevocationMode = X509RevocationMode.NoCheck;
+            host.Credentials.ServiceCertificate.Certificate = CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "wcfservice");
 
-            Console.WriteLine("Press Enter to stop the server.");
-            Console.ReadLine();
+            try
+            {
+                host.Open();
+                Console.WriteLine("SmartCardsService is running at: " + address);
+                Console.WriteLine("Press Enter to stop the service.");
+                Console.ReadLine();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SmartCardsService failed to start: {ex.Message}");
+            }
 
-            Console.WriteLine("Test");
             host.Close();
-
         }
     }
 }
