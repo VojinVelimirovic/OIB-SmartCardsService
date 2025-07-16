@@ -15,7 +15,7 @@ namespace Common
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
-        bool AuthenticateUser(string username, int pin);
+        bool AuthenticateUser(string username, int pin, byte[] clientCert = null); // Only for SmartCardUser
 
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
@@ -24,6 +24,7 @@ namespace Common
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         bool Withdraw(string username, double amount, out string message);
+        
         [OperationContract]
         [FaultContract(typeof(SecurityException))]
         double? GetBalance(string username);

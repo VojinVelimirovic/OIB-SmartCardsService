@@ -43,7 +43,6 @@ namespace Client
             EndpointAddress currentAddress = primaryAddress;
 
             Console.WriteLine("Current user: " + CertManager.ParseName(WindowsIdentity.GetCurrent().Name));
-
             //TestConnection(serviceBinding, atmBinding, ref currentAddress, primaryAddress, backupAddress, atmAddress);
 
             //ShowMenuNoProxy(serviceBinding, primaryAddress, backupAddress, atmBinding, atmAddress);
@@ -54,6 +53,12 @@ namespace Client
             // Currently if fault occurs, client application needs to be restarted !!!
             using (var atmProxy = new ClientProxyATM(atmBinding, atmAddress))
             {
+                if (atmProxy.InitializationFailed)
+                {
+                    Console.WriteLine("Press any key to exit...");
+                    Console.ReadKey();
+                    return;
+                }
                 ShowMenu(serviceBinding, atmProxy, ref currentAddress, primaryAddress, backupAddress);
             }
         }
@@ -227,14 +232,19 @@ namespace Client
             while (true)
             {
                 Console.WriteLine("\n--- Client Menu ---");
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
                 Console.WriteLine("1. SmartCardsService/Create Smart Card");
                 Console.WriteLine("2. SmartCardsService/Change PIN");
+                Console.ResetColor();
                 Console.WriteLine("3. ATM/Deposit Funds");
                 Console.WriteLine("4. ATM/Withdraw Funds");
                 Console.WriteLine("5. ATM/View Balance");
                 Console.WriteLine("6. ATM/View Active User Accounts (Manager Only)");
+                Console.ForegroundColor = ConsoleColor.Magenta;
                 Console.WriteLine("7. Switch SmartCardsService Endpoint Manually");
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
                 Console.WriteLine("8. Exit");
+                Console.ResetColor();
                 Console.Write("Choose an option: ");
 
                 var choice = Console.ReadLine();
@@ -247,6 +257,27 @@ namespace Client
                         case "1": // Create Smart Card
                             Console.Write("Enter username: ");
                             var newUser = Console.ReadLine();
+
+                            //First check if smart card exists
+                            using (var scsProxy = new ClientProxySCS(serviceBinding, currentAddress))
+                            {
+                                try
+                                {
+                                    if (scsProxy.SmartCardExists(newUser))
+                                    {
+                                        ColorfulConsole.WriteError($"Smart card for user '{newUser}' already exists.");
+                                        break;
+                                    }
+                                }
+                                catch (EndpointNotFoundException ex)
+                                {
+                                    ColorfulConsole.WriteError($"- [SmartCardsService] Failed at {currentAddress.Uri}: {ex.Message}");
+                                    SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
+                                    switchBlockActivated = true;
+                                    break;
+                                }
+                            }
+
                             Console.Write("Enter 4-digit PIN: ");
                             if (!int.TryParse(Console.ReadLine(), out int pin) || pin < 1000 || pin > 9999)
                             {
@@ -261,12 +292,15 @@ namespace Client
                                     scsProxy.CreateSmartCard(newUser, pin);
                                     Console.WriteLine("Smart card created successfully.");
                                 }
+                                catch (ArgumentException ex)
+                                {
+                                    ColorfulConsole.WriteError(ex.Message);
+                                }
                                 catch (EndpointNotFoundException ex)
                                 {
                                     ColorfulConsole.WriteError($"- [SmartCardsService] Failed at {currentAddress.Uri}: {ex.Message}");
                                     SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
                                     switchBlockActivated = true;
-                                    break;
                                 }
                             }
                             break;
@@ -359,7 +393,7 @@ namespace Client
                             break;
 
                         case "7": // Switch endpoint
-                            SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress);
+                            SwitchEndpoint(ref currentAddress, primaryAddress, backupAddress, false);
                             break;
 
                         case "8":
@@ -421,12 +455,13 @@ namespace Client
 
             return true;
         }
-        private static void SwitchEndpoint(ref EndpointAddress currentAddress, EndpointAddress primary, EndpointAddress backup)
+        private static void SwitchEndpoint(ref EndpointAddress currentAddress, EndpointAddress primary, EndpointAddress backup, bool tryAgain = true)
         {
             currentAddress = currentAddress == primary ? backup : primary;
             Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine($"[SmartCardsService] Switched to {(currentAddress == primary ? "primary" : "backup")} endpoint {currentAddress.Uri}");
-            Console.WriteLine("Please try again.");
+            if (tryAgain) 
+                Console.WriteLine("Please try again.");
             Console.ResetColor();
         }
         static void TestSignedMessage(NetTcpBinding binding, EndpointAddress intermediaryAddress)

@@ -1,14 +1,12 @@
 ﻿using Common;
 using System;
-using System.Linq;
-using System.ServiceModel;
-using System.Threading;
-using System.Security.Cryptography;
-using System.IO;
-using System.Text.Json;
-using System.Security.Cryptography.X509Certificates;
 using System.IdentityModel.Claims;
-using System.ServiceModel.Security;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.ServiceModel;
+using System.Text.Json;
+using System.Threading;
 
 namespace SmartCardsService
 {
@@ -45,11 +43,23 @@ namespace SmartCardsService
                 string exceptionMessage = String.Format
                     ("Access is denied.\n User {0} tried to call CreateSmartCard method (time: {1}).\n " +
                     "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, DateTime.Now.TimeOfDay);
+                Logger.LogEvent("[SmartCardsService] ERROR: " + exceptionMessage);
+
                 throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
             }
 
             if (string.IsNullOrWhiteSpace(username) || pin < 1000 || pin > 9999)
                 throw new ArgumentException("Invalid username or PIN.");
+
+            // Check if smart card already exists
+            string filePath = Path.Combine(folderPath, $"{username}.json");
+            if (File.Exists(filePath))
+            {
+                string errorMessage = $"SmartCard for user '{username}' already exists.";
+                ColorfulConsole.WriteError(errorMessage);
+                Logger.LogEvent("[SmartCardsService] ERROR: " + errorMessage);
+                throw new ArgumentException(errorMessage);
+            }
 
             string hashedPin = HashPin(pin);
 
@@ -64,13 +74,22 @@ namespace SmartCardsService
                 Directory.CreateDirectory(folderPath);
             }
 
-            string filePath = Path.Combine(folderPath, $"{username}.json");
             string json = JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(filePath, json);
             ColorfulConsole.WriteSuccess($"SmartCard for user '{username}' created successfully.");
-            Logger.LogEvent($"SmartCard for user '{username}' created successfully.");
+            Logger.LogEvent($"[SmartCardsService] SmartCard for user '{username}' created successfully.");
             ReplicateToBackupServer(card);
         }
+
+        public bool SmartCardExists(string username)
+        {
+            if (string.IsNullOrWhiteSpace(username))
+                return false;
+
+            string filePath = Path.Combine(folderPath, $"{username}.json");
+            return File.Exists(filePath);
+        }
+
         public void UpdatePin(string username, int oldPin, int newPin)
         {
             if (!IsUserInValidGroup())
@@ -79,14 +98,20 @@ namespace SmartCardsService
                 DateTime time = DateTime.Now;
                 string exceptionMessage = String.Format("Access is denied.\n User {0} tried to call UpdatePin method (time: {1}).\n " +
                     "For this method user needs to be member of the group SmartCardUser or the group Manager.\n", name, time.TimeOfDay);
+                Logger.LogEvent("[SmartCardsService] ERROR: " + exceptionMessage);
+
                 throw new FaultException<SecurityException>(new SecurityException(exceptionMessage));
             }
 
             if (!ValidateSmartCard(username, oldPin))
             {
+                string name = Thread.CurrentPrincipal.Identity.Name;
+                string exceptionMessage = String.Format("Security validation failed for user {0}! Invalid username or pin.", name);
+                Logger.LogEvent("[SmartCardsService] ERROR: " + exceptionMessage);
+
                 throw new FaultException<SecurityException>(
                     new SecurityException("Access is denied. Invalid username or pin.\n"), 
-                    new FaultReason("Security validation failed! Invalid username or pin."), 
+                    new FaultReason(exceptionMessage), 
                     new FaultCode("Sender"));
             }
 
@@ -98,9 +123,10 @@ namespace SmartCardsService
             File.WriteAllText(filePath, JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true }));
 
             ColorfulConsole.WriteSuccess($"PIN changed for user '{username}'.");
-            Logger.LogEvent($"PIN changed for user '{username}'.");
+            Logger.LogEvent($"[SmartCardsService] PIN changed for user '{username}'.");
             ReplicateToBackupServer(card);
         }
+
         public bool ValidateSmartCard(string username, int pin)
         {
             string filePath = Path.Combine(folderPath, $"{username}.json");
@@ -110,7 +136,9 @@ namespace SmartCardsService
             SmartCard card = JsonSerializer.Deserialize<SmartCard>(json);
 
             string hashedPin = HashPin(pin);
+
             Console.WriteLine($"Received validation request for {username}.");
+            
             return card?.PIN == hashedPin;
         }
 
@@ -122,6 +150,7 @@ namespace SmartCardsService
                 return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
             }
         }
+
         private void ReplicateToBackupServer(SmartCard card)
         {
             ISmartCardsService proxy = null;
@@ -137,12 +166,15 @@ namespace SmartCardsService
 
                 // If this arrived on 9001 (we're in main), send to backup on 9000
                 // Otherwise (shouldn't happen), default to main on 9001
-                string replicationAddress = localUri.Contains(":9001/SmartCardsReplication")
+                string replicationAddress = localUri.Contains(":9999/SmartCardsService")
                     ? "net.tcp://localhost:9000/SmartCardsReplication"  // Main -> Backup
-                    : "net.tcp://localhost:9001/SmartCardsReplication"; // Shouldn't normally happen
+                    : "net.tcp://localhost:9001/SmartCardsReplication"; // Backup -> Main
 
                 NetTcpBinding binding = new NetTcpBinding();
-                binding.Security.Mode = SecurityMode.None;
+                //binding.Security.Mode = SecurityMode.None;
+                binding.Security.Mode = SecurityMode.Transport;
+                binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Windows;
+                binding.Security.Transport.ProtectionLevel = System.Net.Security.ProtectionLevel.EncryptAndSign;
                 binding.SendTimeout = TimeSpan.FromSeconds(5); // Fail fast if backup is down
 
                 EndpointAddress address = new EndpointAddress(replicationAddress);
@@ -156,24 +188,15 @@ namespace SmartCardsService
 
                 proxy.ReplicateSmartCard(card);
 
-                // Verify channel state
-                if (channel.State == CommunicationState.Faulted)
-                {
-                    throw new CommunicationException("Replication failed - channel faulted");
-                }
-
                 Console.WriteLine("Data successfully replicated to backup");
-                Logger.LogEvent("Data successfully replicated to backup");
+                Logger.LogEvent("[SmartCardsService] Data successfully replicated to backup");
                 channel.Close();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"ERROR: Replication to backup failed: {ex.Message}");
-                Logger.LogEvent($"ERROR: Replication to backup failed: {ex.Message}");
+                ColorfulConsole.WriteError($"Replication to backup failed: {ex.Message}");
+                Logger.LogEvent($"[SmartCardsService] ERROR: Replication to backup failed: {ex.Message}");
                 channel?.Abort();
-
-                // Consider throwing if caller needs to know replication failed
-                // throw; 
             }
         }
 
@@ -185,7 +208,6 @@ namespace SmartCardsService
 
                 if (!Directory.Exists(folderPath))
                 {
-                    Logger.LogEvent("SmartCards folder not found.");
                     return Array.Empty<string>();
                 }
 
@@ -195,17 +217,35 @@ namespace SmartCardsService
                     .Select(file => Path.GetFileNameWithoutExtension(file))
                     .ToArray();
 
-                Logger.LogEvent($"GetActiveUserAccounts called. Found {usernames.Length} users.");
-
                 return usernames;
             }
             catch (Exception ex)
             {
-                Logger.LogEvent($"Error in GetActiveUserAccounts: {ex.Message}");
+                Console.WriteLine($"Error in GetActiveUserAccounts: {ex.Message}");
                 return Array.Empty<string>();
             }
         }
 
+
+        public void ReplicateSmartCard(SmartCard card)
+        {
+            if (!Directory.Exists(folderPath))
+                Directory.CreateDirectory(folderPath);
+
+            try
+            {
+                string path = Path.Combine(folderPath, $"{card.SubjectName}.json");
+                string json = JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(path, json);
+
+                Logger.LogEvent($"[SmartCardsService Replication] Received SmartCard for '{card.SubjectName}' at {path}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogEvent($"[SmartCardsService Replication] ERROR: Failed to save SmartCard for '{card.SubjectName}': {ex.Message}");
+                throw;
+            }
+        }
 
         //////////////////////////////////
         private static bool IsUserInValidGroup()
@@ -227,18 +267,6 @@ namespace SmartCardsService
 
             // 3) Only allow if OU is exactly one of these
             return ou == "SmartCardUser" || ou == "Manager";
-        }
-
-        public void ReplicateSmartCard(SmartCard card)
-        {
-            if (!Directory.Exists(folderPath))
-                Directory.CreateDirectory(folderPath);
-
-            string path = Path.Combine(folderPath, $"{card.SubjectName}.json");
-            string json = JsonSerializer.Serialize(card, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(path, json);
-
-            Logger.LogEvent($"[Replication] Received SmartCard for '{card.SubjectName}' at {path}");
         }
     }
 }

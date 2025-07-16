@@ -23,9 +23,14 @@ namespace Common
         bool ValidateSmartCard(string username, int pin);
 
         [OperationContract]
+        bool SmartCardExists(string username);
+
+        [OperationContract]
         void UpdatePin(string username, int oldPin, int newPin);
+        
         [OperationContract(IsOneWay = true)]
         void ReplicateSmartCard(SmartCard card);
+        
         [OperationContract]
         string[] GetActiveUserAccounts();
 

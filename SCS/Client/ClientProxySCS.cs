@@ -42,7 +42,10 @@ namespace Client
         {
             return factory.ValidateSmartCard(username, pin);
         }
-
+        public bool SmartCardExists(string username)
+        {
+            return factory.SmartCardExists(username);
+        }
         public void UpdatePin(string username, int oldPin, int newPin)
         {
             factory.UpdatePin(username, oldPin, newPin);

@@ -10,6 +10,8 @@ namespace Client
     internal class ClientProxyATM : ChannelFactory<IATMService>, IATMService, IDisposable
     {
         IATMService factory;
+        private bool _initializationFailed = false;
+        public bool InitializationFailed => _initializationFailed;
 
         public ClientProxyATM(NetTcpBinding binding, EndpointAddress address) 
             : base(binding, address)
@@ -20,13 +22,22 @@ namespace Client
             string clientName = CertManager.ParseName(WindowsIdentity.GetCurrent().Name);
             string certCN = clientName + "_sign";
 
-            this.Credentials.ClientCertificate.SetCertificate(
-                StoreLocation.LocalMachine,
-                StoreName.My,
-                X509FindType.FindBySubjectName,
-                certCN
-            );
-            factory = this.CreateChannel();
+            try
+            { 
+                this.Credentials.ClientCertificate.SetCertificate(
+                    StoreLocation.LocalMachine,
+                    StoreName.My,
+                    X509FindType.FindBySubjectName,
+                    certCN
+                );
+                factory = this.CreateChannel();
+            }
+            catch (Exception ex)
+            {
+                _initializationFailed = true;
+                ColorfulConsole.WriteError("Current user does not have the required certificate.");
+                ColorfulConsole.WriteError($"Details: {ex.Message}");
+            }
         }
 
         public void TestCommunication()
@@ -47,29 +58,36 @@ namespace Client
             factory.SignedMessage(request);
         }
 
-        public bool AuthenticateUser(string username, int pin)
+        public bool AuthenticateUser(string username, int pin, byte[] clientCert = null)
         {
-            return factory.AuthenticateUser(username, pin);
+            var cert = this.Credentials.ClientCertificate.Certificate;
+            byte[] certBytes = cert.Export(X509ContentType.Cert);
+            return factory.AuthenticateUser(username, pin, certBytes);
         }
+
         public double? GetBalance(string username)
         {
             return factory.GetBalance(username);
         }
+
         public bool Deposit(string username, double amount)
         {
             return factory.Deposit(username, amount);
         }
+
         public bool Withdraw(string username, double amount, out string message)
         {
             message = string.Empty;
             return factory.Withdraw(username, amount, out message);
         }
+
         public string[] GetActiveUserAccounts()
         {
             var cert = this.Credentials.ClientCertificate.Certificate;
             byte[] certBytes = cert.Export(X509ContentType.Cert);
             return factory.GetActiveUserAccounts(certBytes);
         }
+
         protected override void OnClosed()
         {
             base.OnClosed();

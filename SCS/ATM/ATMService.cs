@@ -65,9 +65,12 @@ namespace ATM
             }
         }
 
-        public bool AuthenticateUser(string username, int pin)
+        public bool AuthenticateUser(string username, int pin, byte[] clientCert)
         {
-            Console.WriteLine($"Authenticating user '{username}' with SmartCardsService...");
+            Console.WriteLine($"\nAuthenticating user '{username}' with SmartCardsService...");
+
+            _CheckClientOU("SmartCardUser", clientCert);
+
 
             bool success = TryAuthenticate(_usePrimary ? _primaryAddress : _backupAddress, username, pin);
 
@@ -88,6 +91,7 @@ namespace ATM
 
             return isAuthenticated;
         }
+
 
         private bool TryAuthenticate(EndpointAddress address, string username, int pin)
         {
@@ -119,11 +123,6 @@ namespace ATM
                 isAuthenticated = response;
                 return true; // Return true for successful communication (regardless of auth result)
             }
-            catch (EndpointNotFoundException ex)
-            {
-                Console.WriteLine($"Failed to forward to {address.Uri}: {ex.Message}");
-                return false; // Return false for communication failure
-            }
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to forward to {address.Uri}: {ex.Message}");
@@ -131,8 +130,8 @@ namespace ATM
             }
             finally
             {
-                SafeClose(channel);
-                SafeClose(factory);
+                _SafeClose(channel);
+                _SafeClose(factory);
             }
         }
 
@@ -184,26 +183,7 @@ namespace ATM
         {
             try
             {
-                if (clientCert == null || clientCert.Length == 0)
-                    throw new FaultException<SecurityException>(new SecurityException("Client certificate not provided."),new FaultReason("Client certificate not provided."));
-
-                X509Certificate2 cert;
-                try
-                {
-                    cert = new X509Certificate2(clientCert);
-                }
-                catch (Exception)
-                {
-                    throw new FaultException<SecurityException>(new SecurityException("Invalid certificate format."), new FaultReason("Invalid certificate format."));
-                }
-
-                var subject = cert.Subject; // e.g., "CN=client, OU=Manager, O=Org, C=US"
-                var ouPart = subject.Split(',')
-                                    .Select(s => s.Trim())
-                                    .FirstOrDefault(p => p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase));
-
-                if (ouPart == null || !ouPart.Equals("OU=Manager", StringComparison.OrdinalIgnoreCase))
-                    throw new FaultException<SecurityException>(new SecurityException("You must be a certified Manager to access this method."), new FaultReason("You must be a certified Manager to access this method."));
+                _CheckClientOU("Manager", clientCert);
 
                 string[] result = null;
                 bool success = false;
@@ -226,7 +206,9 @@ namespace ATM
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error during CallGetActiveUserAccounts: {ex.Message}");
-                    throw new FaultException<SecurityException>(new SecurityException("Failed to get user accounts: " + ex.Message), new FaultReason("Failed to get user accounts: " + ex.Message));
+                    throw new FaultException<SecurityException>(
+                        new SecurityException("Failed to get user accounts: " + ex.Message), 
+                        new FaultReason("Failed to get user accounts: " + ex.Message));
                 }
 
                 return result;
@@ -278,10 +260,48 @@ namespace ATM
             }
             finally
             {
-                if (factory?.State != CommunicationState.Faulted)
-                    factory?.Close();
+                _SafeClose(factory);
+            }
+        }
+
+        private void _CheckClientOU(string expectedOU, byte[] clientCert)
+        {
+            if (clientCert == null || clientCert.Length == 0)
+                throw new FaultException<SecurityException>(new SecurityException("Client certificate not provided."), new FaultReason("Client certificate not provided."));
+
+            X509Certificate2 cert;
+            try
+            {
+                cert = new X509Certificate2(clientCert);
+            }
+            catch (Exception)
+            {
+                throw new FaultException<SecurityException>(new SecurityException("Invalid certificate format."), new FaultReason("Invalid certificate format."));
+            }
+
+            var subject = cert.Subject; // e.g., "CN=client, OU=Manager"
+            var ouPart = subject.Split(',')
+                                .Select(s => s.Trim())
+                                .FirstOrDefault(p => p.StartsWith("OU=", StringComparison.OrdinalIgnoreCase));
+
+            if (ouPart == null || !ouPart.Equals($"OU={expectedOU}", StringComparison.OrdinalIgnoreCase))
+                throw new FaultException<SecurityException>(new SecurityException($"You must be a certified {expectedOU} to access this method."),
+                    new FaultReason($"You must be a certified {expectedOU} to access this method."));
+        }
+
+        private static void _SafeClose(ICommunicationObject comObj)
+        {
+            if (comObj == null) return;
+            try
+            {
+                if (comObj.State != CommunicationState.Faulted)
+                    comObj.Close();
                 else
-                    factory?.Abort();
+                    comObj.Abort();
+            }
+            catch
+            {
+                comObj.Abort();
             }
         }
 
@@ -329,6 +349,7 @@ namespace ATM
             }
         }
 
+        // testing
         private bool TryForwardRequest(EndpointAddress address, SignedRequest signedRequest = null)
         {
             ChannelFactory<ISmartCardsService> factory = null;
@@ -379,7 +400,7 @@ namespace ATM
             }
         }
 
-        // For testing purposes
+        // testing
         private bool TryForwardRequest(EndpointAddress address)
         {
             try
@@ -406,21 +427,6 @@ namespace ATM
             {
                 Console.WriteLine($"Failed to forward to {address.Uri}: {ex}");
                 return false;
-            }
-        }
-        static void SafeClose(ICommunicationObject comObj)
-        {
-            if (comObj == null) return;
-            try
-            {
-                if (comObj.State != CommunicationState.Faulted)
-                    comObj.Close();
-                else
-                    comObj.Abort();
-            }
-            catch
-            {
-                comObj.Abort();
             }
         }
     }

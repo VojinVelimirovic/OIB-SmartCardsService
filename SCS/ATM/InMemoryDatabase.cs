@@ -35,7 +35,7 @@ namespace ATM
 
             _userCreditBalance[username] += amount;
             Console.WriteLine($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]:N2} RSD.");
-            Logger.LogEvent($"User {username} deposited {amount}. New balance: {_userCreditBalance[username]:N2} RSD.");
+            Logger.LogEvent($"[ATM] User {username} deposited {amount}. New balance: {_userCreditBalance[username]:N2} RSD.");
         }
 
         public void Withdraw(string username, double amount)
@@ -44,19 +44,14 @@ namespace ATM
             {
                 _userCreditBalance.Add(username, 0);
                 Console.WriteLine($"User {username} failed to withdraw {amount:N2} RSD. Balance: 0.0 RSD.");
-                Logger.LogEvent($"User {username} failed to withdraw {amount::N2} RSD. Balance: 0.0 RSD.");
+                Logger.LogEvent($"[ATM] User {username} failed to withdraw {amount::N2} RSD. Balance: 0.0 RSD.");
                 throw new Exception("Insufficient balance. Balance: 0.0 RSD.");
             }
-
-            if (UserExists(username))
+            else if(_userCreditBalance[username] >= amount)
             {
-                if (_userCreditBalance[username] >= amount)
-                {
-                    _userCreditBalance[username] -= amount;
-                    Console.WriteLine($"User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
-                    Logger.LogEvent($"User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
-                }
-                throw new Exception($"Insufficient balance. Balance: {_userCreditBalance[username]:N2} RSD.");
+                _userCreditBalance[username] -= amount;
+                Console.WriteLine($"User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
+                Logger.LogEvent($"[ATM] User {username} withdrew {amount:N2} RSD. New balance: {_userCreditBalance[username]:N2} RSD.");
             }
         }
         
