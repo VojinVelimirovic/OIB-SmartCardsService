@@ -34,6 +34,7 @@ namespace SmartCardsService
 
             ServiceHost host = new ServiceHost(typeof(SmartCardsService));
             host.AddServiceEndpoint(typeof(ISmartCardsService), binding, address);
+            host.AddServiceEndpoint(typeof(ISmartCardsService_ATM), binding, address);
             host.AddServiceEndpoint(typeof(ISmartCardsService), replicationBinding, replicationAddress);
 
             host.Credentials.ClientCertificate.Authentication.CertificateValidationMode = X509CertificateValidationMode.ChainTrust;

@@ -48,6 +48,7 @@
     <Compile Include="DigitalSignature.cs" />
     <Compile Include="IATMService.cs" />
     <Compile Include="ISmartCardsService.cs" />
+    <Compile Include="ISmartCardsService_ATM.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SecurityException.cs" />

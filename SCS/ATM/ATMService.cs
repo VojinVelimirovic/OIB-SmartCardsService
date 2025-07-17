@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Linq;
-using System.ServiceModel;
-using Common;
-using System.Security.Cryptography.X509Certificates;
 using System.Net.Security;
 using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using System.ServiceModel;
 using System.ServiceModel.Security;
 
 namespace ATM
@@ -22,6 +23,7 @@ namespace ATM
 
         public ATMService()
         {
+
             _binding = new NetTcpBinding(SecurityMode.Transport);
             _binding.Security.Transport.ClientCredentialType = TcpClientCredentialType.Certificate;
             _binding.Security.Transport.ProtectionLevel = ProtectionLevel.EncryptAndSign;
@@ -95,12 +97,12 @@ namespace ATM
 
         private bool TryAuthenticate(EndpointAddress address, string username, int pin)
         {
-            ChannelFactory<ISmartCardsService> factory = null;
+            ChannelFactory<ISmartCardsService_ATM> factory = null;
             IClientChannel channel = null;
 
             try
             {
-                factory = new ChannelFactory<ISmartCardsService>(_binding, address);
+                factory = new ChannelFactory<ISmartCardsService_ATM>(_binding, address);
 
                 factory.Credentials.ClientCertificate.Certificate =
                     CertManager.GetCertificateFromStorage(StoreName.My, StoreLocation.LocalMachine, "oib_atm");
@@ -112,7 +114,7 @@ namespace ATM
                 channel = (IClientChannel)factory.CreateChannel();
                 channel.Open();
 
-                bool response = ((ISmartCardsService)channel).ValidateSmartCard(username, pin);
+                bool response = ((ISmartCardsService_ATM)channel).ValidateSmartCard_FromATM(username, HashPin(pin));
                 channel.Close();
 
                 if (response)
@@ -132,6 +134,15 @@ namespace ATM
             {
                 _SafeClose(channel);
                 _SafeClose(factory);
+            }
+        }
+
+        private string HashPin(int pin)
+        {
+            using (SHA256 sha256 = SHA256.Create())
+            {
+                byte[] hashBytes = sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(pin.ToString()));
+                return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
             }
         }
 
@@ -315,7 +326,7 @@ namespace ATM
                 string certCN = request.SenderName + "_sign";
                 var cert = CertManager.GetClientCertificate(certCN);
 
-                bool isValid = DigitalSignature.Verify(request.Message, HashAlgorithm.SHA1, request.Signature, cert);
+                bool isValid = DigitalSignature.Verify(request.Message, Common.HashAlgorithm.SHA1, request.Signature, cert);
 
                 if (!isValid)
                 {

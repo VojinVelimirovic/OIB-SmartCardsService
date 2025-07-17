@@ -3,6 +3,7 @@ using System;
 using System.IdentityModel.Claims;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Security.Cryptography;
 using System.ServiceModel;
 using System.Text.Json;
@@ -11,7 +12,7 @@ using System.Threading;
 namespace SmartCardsService
 {
     [ServiceBehavior(IncludeExceptionDetailInFaults = true)]
-    public class SmartCardsService : ISmartCardsService
+    public class SmartCardsService : ISmartCardsService, ISmartCardsService_ATM
     {
         private readonly string folderPath;
         public SmartCardsService()
@@ -142,6 +143,19 @@ namespace SmartCardsService
             return card?.PIN == hashedPin;
         }
 
+        public bool ValidateSmartCard_FromATM(string username, string hashedPin)
+        {
+            string filePath = Path.Combine(folderPath, $"{username}.json");
+            if (!File.Exists(filePath)) return false;
+
+            string json = File.ReadAllText(filePath);
+            SmartCard card = JsonSerializer.Deserialize<SmartCard>(json);
+
+            Console.WriteLine($"Received validation request for {username}.");
+
+            return card?.PIN == hashedPin;
+        }
+
         private string HashPin(int pin)
         {
             using (SHA256 sha256 = SHA256.Create())
@@ -268,5 +282,6 @@ namespace SmartCardsService
             // 3) Only allow if OU is exactly one of these
             return ou == "SmartCardUser" || ou == "Manager";
         }
+
     }
 }
